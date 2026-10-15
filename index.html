@@ -76,17 +76,63 @@
             </div>
           </section>
 
+          <section class="appearance-controls" aria-labelledby="appearance-title">
+            <h3 id="appearance-title" class="control-section-title">Cores e materiais</h3>
+
+            <div class="color-presets" role="group" aria-label="Cores predefinidas">
+              <button class="color-option" type="button" data-object-color="#6c8cff" aria-pressed="true">
+                <span class="color-swatch color-swatch--blue" aria-hidden="true"></span>
+                Azul
+              </button>
+              <button class="color-option" type="button" data-object-color="#f06b6b" aria-pressed="false">
+                <span class="color-swatch color-swatch--red" aria-hidden="true"></span>
+                Vermelho
+              </button>
+              <button class="color-option" type="button" data-object-color="#54c88a" aria-pressed="false">
+                <span class="color-swatch color-swatch--green" aria-hidden="true"></span>
+                Verde
+              </button>
+              <button class="color-option" type="button" data-object-color="#f1c75b" aria-pressed="false">
+                <span class="color-swatch color-swatch--yellow" aria-hidden="true"></span>
+                Amarelo
+              </button>
+              <button class="color-option" type="button" data-object-color="#a879e8" aria-pressed="false">
+                <span class="color-swatch color-swatch--purple" aria-hidden="true"></span>
+                Roxo
+              </button>
+            </div>
+
+            <label class="custom-color-control" for="custom-object-color">
+              <span>Cor personalizada</span>
+              <input id="custom-object-color" type="color" value="#6c8cff" aria-label="Escolha uma cor personalizada para o objeto" />
+            </label>
+
+            <div class="material-mode-control">
+              <span class="mode-label">Material</span>
+              <div class="material-mode-options" role="group" aria-label="Modo de exibição do material">
+                <button class="mode-option" type="button" data-material-mode="solid" aria-pressed="true">
+                  Sólido
+                </button>
+                <button class="mode-option" type="button" data-material-mode="wireframe" aria-pressed="false">
+                  Aramado
+                </button>
+              </div>
+            </div>
+
+            <button class="reset-appearance" type="button" data-reset-appearance>
+              Restaurar aparência
+            </button>
+          </section>
+
           <div class="coming-soon">
             <span class="coming-soon-icon" aria-hidden="true">✦</span>
             <h3>Seu espaço de criação</h3>
             <p>
-              Nas próximas etapas, você poderá explorar cores, materiais e
-              iluminação.
+              Nas próximas etapas, você poderá explorar iluminação e animações.
             </p>
           </div>
 
           <div class="reserved-controls" aria-label="Controles planejados para as próximas etapas">
-            <div><span class="control-dot"></span> Cores e materiais <span class="locked-label">EM BREVE</span></div>
             <div><span class="control-dot"></span> Iluminação <span class="locked-label">EM BREVE</span></div>
             <div><span class="control-dot"></span> Animações <span class="locked-label">EM BREVE</span></div>
           </div>

@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const MAX_PIXEL_RATIO = 2;
 const OBJECT_COLOR = '#6c8cff';
+const SOLID_MATERIAL = { color: OBJECT_COLOR, wireframe: false };
 
 const createGeometry = {
   box: () => new THREE.BoxGeometry(1.5, 1.5, 1.5),
@@ -33,9 +34,10 @@ export function createScene(container) {
   controls.target.set(0, 0.5, 0);
 
   const material = new THREE.MeshStandardMaterial({
-    color: OBJECT_COLOR,
+    color: SOLID_MATERIAL.color,
     roughness: 0.38,
     metalness: 0.12,
+    wireframe: SOLID_MATERIAL.wireframe,
   });
   let currentShape = 'box';
   let object = new THREE.Mesh(createGeometry[currentShape](), material);
@@ -62,6 +64,20 @@ export function createScene(container) {
     scene.add(nextObject);
     object = nextObject;
     currentShape = shape;
+  }
+
+  function setColor(color) {
+    material.color.set(color);
+  }
+
+  function setWireframe(wireframe) {
+    material.wireframe = wireframe;
+    material.needsUpdate = true;
+  }
+
+  function resetAppearance() {
+    setColor(SOLID_MATERIAL.color);
+    setWireframe(SOLID_MATERIAL.wireframe);
   }
 
   const grid = new THREE.GridHelper(10, 20, '#68748a', '#343d4d');
@@ -97,5 +113,5 @@ export function createScene(container) {
   }
 
   renderer.setAnimationLoop(render);
-  return selectObject;
+  return { selectObject, setColor, setWireframe, resetAppearance };
 }
