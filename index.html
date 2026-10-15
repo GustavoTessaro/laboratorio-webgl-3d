@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Um laboratório didático para explorar gráficos 3D no navegador com WebGL."
+    />
+    <meta name="theme-color" content="#10131a" />
+    <title>Laboratório WebGL 3D</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Laboratório WebGL 3D, início">
+          <span class="brand-mark" aria-hidden="true">3D</span>
+          <span>Laboratório <strong>WebGL 3D</strong></span>
+        </a>
+        <span class="technology-badge">Three.js <span aria-hidden="true">·</span> WebGL</span>
+      </header>
+
+      <main class="workspace">
+        <section class="scene-panel" aria-labelledby="scene-title">
+          <div class="scene-heading">
+            <div>
+              <p class="eyebrow">EXPERIMENTO 01</p>
+              <h1 id="scene-title">Primeira cena 3D</h1>
+            </div>
+            <span class="scene-status"><span aria-hidden="true"></span> Cena interativa</span>
+          </div>
+
+          <div class="scene-frame">
+            <div id="scene-container" class="scene-container" aria-label="Cena 3D interativa com um cubo">
+              <div id="webgl-message" class="webgl-message" role="status" hidden>
+                <span class="message-icon" aria-hidden="true">!</span>
+                <h2>Não foi possível iniciar a cena 3D</h2>
+                <p>
+                  Seu navegador ou dispositivo não oferece suporte adequado ao WebGL.
+                  Tente atualizar o navegador ou acessar por outro dispositivo.
+                </p>
+              </div>
+            </div>
+            <div class="scene-hint" aria-hidden="true">
+              <span>Arraste para orbitar</span>
+              <span class="hint-separator">·</span>
+              <span>Role ou aproxime para zoom</span>
+            </div>
+          </div>
+        </section>
+
+        <aside class="controls-panel" aria-labelledby="controls-title">
+          <div class="panel-heading">
+            <span class="panel-icon" aria-hidden="true">☷</span>
+            <div>
+              <p class="eyebrow">PERSONALIZAÇÃO</p>
+              <h2 id="controls-title">Controles</h2>
+            </div>
+          </div>
+
+          <div class="coming-soon">
+            <span class="coming-soon-icon" aria-hidden="true">✦</span>
+            <h3>Seu espaço de criação</h3>
+            <p>
+              Nas próximas etapas, você poderá personalizar os objetos e explorar
+              cores, materiais e iluminação.
+            </p>
+          </div>
+
+          <div class="reserved-controls" aria-label="Controles planejados para as próximas etapas">
+            <div><span class="control-dot"></span> Objetos <span class="locked-label">EM BREVE</span></div>
+            <div><span class="control-dot"></span> Cores e materiais <span class="locked-label">EM BREVE</span></div>
+            <div><span class="control-dot"></span> Iluminação <span class="locked-label">EM BREVE</span></div>
+            <div><span class="control-dot"></span> Animações <span class="locked-label">EM BREVE</span></div>
+          </div>
+          <p class="panel-footer">INTERAJA COM A CENA USANDO O MOUSE OU TOQUE</p>
+        </aside>
+      </main>
+
+      <footer class="footer">
+        <span>Uma experiência de aprendizado em computação gráfica</span>
+        <span>Etapa 1 <span aria-hidden="true">·</span> Cena inicial</span>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
