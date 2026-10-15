@@ -567,6 +567,120 @@ h1 {
   margin-top: 15px;
 }
 
+.animation-controls {
+  padding: 21px 0 0;
+}
+
+.animation-controls .control-section-title {
+  margin-bottom: 8px;
+}
+
+.animation-description {
+  margin: 0 0 13px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.animation-toggle {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #5369bc;
+  border-radius: 8px;
+  background: #293456;
+  color: #e3e9ff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.animation-toggle:hover {
+  border-color: #8296e8;
+  background: #33416b;
+}
+
+.animation-toggle[aria-pressed='true'] {
+  border-color: #795f63;
+  background: #3a292f;
+  color: #ffd9d5;
+}
+
+.animation-toggle:focus-visible,
+.axis-option:focus-visible,
+.reset-orientation:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.animation-status {
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.animation-status::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #778197;
+  content: '';
+  vertical-align: 1px;
+}
+
+.animation-toggle[aria-pressed='true'] + .animation-status {
+  color: #9be0ba;
+}
+
+.animation-toggle[aria-pressed='true'] + .animation-status::before {
+  background: #69d6a4;
+  box-shadow: 0 0 8px #69d6a466;
+}
+
+.rotation-axis-control {
+  margin-top: 13px;
+}
+
+.rotation-axis-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.axis-option {
+  min-height: 34px;
+  border: 1px solid #2a303c;
+  border-radius: 8px;
+  background: #191e28;
+  color: #b7bfcc;
+  cursor: pointer;
+  font-size: 10px;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.axis-option:hover {
+  border-color: #536391;
+  background: #202738;
+}
+
+.axis-option[aria-pressed='true'] {
+  border-color: #7088e6;
+  background: #293456;
+  color: #e3e9ff;
+}
+
+.reset-orientation {
+  margin-top: 12px;
+}
+
 .coming-soon-icon {
   display: inline-block;
   margin-bottom: 9px;

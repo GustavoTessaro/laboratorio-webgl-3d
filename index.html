@@ -204,13 +204,65 @@
             <span class="coming-soon-icon" aria-hidden="true">✦</span>
             <h3>Seu espaço de criação</h3>
             <p>
-              Nas próximas etapas, você poderá explorar animações.
+              Explore como cada ajuste transforma a aparência e o movimento da cena.
             </p>
           </div>
 
-          <div class="reserved-controls" aria-label="Controles planejados para as próximas etapas">
-            <div><span class="control-dot"></span> Animações <span class="locked-label">EM BREVE</span></div>
-          </div>
+          <section class="animation-controls" aria-labelledby="animation-title">
+            <h3 id="animation-title" class="control-section-title">Animações</h3>
+            <p class="animation-description">
+              A rotação é atualizada a cada quadro com base no tempo decorrido,
+              mantendo um movimento consistente em diferentes telas. Ela começa
+              pausada e só é ativada por você.
+            </p>
+
+            <button
+              class="animation-toggle"
+              type="button"
+              data-toggle-rotation
+              aria-pressed="false"
+            >
+              Iniciar rotação
+            </button>
+            <p class="animation-status" data-animation-status role="status" aria-live="polite">
+              Animação pausada
+            </p>
+
+            <label class="range-control" for="rotation-speed">
+              <span class="range-label">
+                <span>Velocidade da rotação</span>
+                <output id="rotation-speed-value" for="rotation-speed">45°/s</output>
+              </span>
+              <input
+                id="rotation-speed"
+                type="range"
+                min="0"
+                max="120"
+                step="5"
+                value="45"
+                aria-label="Velocidade de rotação em graus por segundo"
+              />
+            </label>
+
+            <div class="rotation-axis-control">
+              <span class="mode-label">Eixo de rotação</span>
+              <div class="rotation-axis-options" role="group" aria-label="Escolha o eixo de rotação">
+                <button class="axis-option" type="button" data-rotation-axis="x" aria-pressed="false">
+                  X
+                </button>
+                <button class="axis-option" type="button" data-rotation-axis="y" aria-pressed="true">
+                  Y
+                </button>
+                <button class="axis-option" type="button" data-rotation-axis="z" aria-pressed="false">
+                  Z
+                </button>
+              </div>
+            </div>
+
+            <button class="reset-appearance reset-orientation" type="button" data-reset-orientation>
+              Restaurar orientação
+            </button>
+          </section>
           <p class="panel-footer">INTERAJA COM A CENA USANDO O MOUSE OU TOQUE</p>
         </aside>
       </main>

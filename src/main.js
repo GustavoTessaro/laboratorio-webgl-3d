@@ -21,6 +21,12 @@ const lightingOutputs = {
   directionalY: document.querySelector('#directional-y-value'),
 };
 const resetLightingButton = document.querySelector('[data-reset-lighting]');
+const rotationToggleButton = document.querySelector('[data-toggle-rotation]');
+const rotationStatus = document.querySelector('[data-animation-status]');
+const rotationSpeedInput = document.querySelector('#rotation-speed');
+const rotationSpeedOutput = document.querySelector('#rotation-speed-value');
+const rotationAxisButtons = document.querySelectorAll('[data-rotation-axis]');
+const resetOrientationButton = document.querySelector('[data-reset-orientation]');
 
 try {
   const sceneControls = createScene(container);
@@ -97,6 +103,32 @@ try {
       lightingInputs[key].value = String(value);
       lightingOutputs[key].value = value.toFixed(1).replace('.', ',');
     });
+  });
+
+  rotationToggleButton.addEventListener('click', () => {
+    const isRotating = sceneControls.toggleRotation();
+    rotationToggleButton.setAttribute('aria-pressed', String(isRotating));
+    rotationToggleButton.textContent = isRotating ? 'Pausar rotação' : 'Iniciar rotação';
+    rotationStatus.textContent = isRotating ? 'Animação ativa' : 'Animação pausada';
+  });
+
+  rotationSpeedInput.addEventListener('input', () => {
+    const degreesPerSecond = Number(rotationSpeedInput.value);
+    sceneControls.setRotationSpeed(degreesPerSecond);
+    rotationSpeedOutput.value = `${degreesPerSecond}°/s`;
+  });
+
+  rotationAxisButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      sceneControls.setRotationAxis(button.dataset.rotationAxis);
+      rotationAxisButtons.forEach((option) => {
+        option.setAttribute('aria-pressed', String(option === button));
+      });
+    });
+  });
+
+  resetOrientationButton.addEventListener('click', () => {
+    sceneControls.resetOrientation();
   });
 } catch (error) {
   console.error('Não foi possível inicializar o WebGL.', error);

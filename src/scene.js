@@ -10,6 +10,9 @@ const INITIAL_LIGHTING = {
   directionalX: 4,
   directionalY: 7,
 };
+const MAX_FRAME_DELTA = 0.05;
+const INITIAL_ROTATION_SPEED = 45;
+const INITIAL_ROTATION_AXIS = 'y';
 
 const createGeometry = {
   box: () => new THREE.BoxGeometry(1.5, 1.5, 1.5),
@@ -51,6 +54,9 @@ export function createScene(container) {
   object.castShadow = true;
   object.receiveShadow = true;
   scene.add(object);
+  let isRotating = false;
+  let rotationSpeed = INITIAL_ROTATION_SPEED;
+  let rotationAxis = INITIAL_ROTATION_AXIS;
 
   function selectObject(shape) {
     if (shape === currentShape) return;
@@ -126,6 +132,26 @@ export function createScene(container) {
     return INITIAL_LIGHTING;
   }
 
+  function toggleRotation() {
+    isRotating = !isRotating;
+    return isRotating;
+  }
+
+  function setRotationSpeed(degreesPerSecond) {
+    rotationSpeed = THREE.MathUtils.degToRad(degreesPerSecond);
+  }
+
+  function setRotationAxis(axis) {
+    if (!['x', 'y', 'z'].includes(axis)) {
+      throw new Error(`Eixo de rotação desconhecido: ${axis}`);
+    }
+    rotationAxis = axis;
+  }
+
+  function resetOrientation() {
+    object.rotation.set(0, 0, 0);
+  }
+
   function resizeRenderer() {
     const { width, height } = container.getBoundingClientRect();
     if (width === 0 || height === 0) return;
@@ -140,7 +166,20 @@ export function createScene(container) {
   window.addEventListener('resize', resizeRenderer);
   resizeRenderer();
 
+  const clock = new THREE.Clock();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      clock.stop();
+    } else {
+      clock.start();
+    }
+  });
+
   function render() {
+    const delta = Math.min(clock.getDelta(), MAX_FRAME_DELTA);
+    if (isRotating) {
+      object.rotation[rotationAxis] += rotationSpeed * delta;
+    }
     controls.update();
     renderer.render(scene, camera);
   }
@@ -156,5 +195,9 @@ export function createScene(container) {
     setDirectionalX,
     setDirectionalY,
     resetLighting,
+    toggleRotation,
+    setRotationSpeed,
+    setRotationAxis,
+    resetOrientation,
   };
 }
