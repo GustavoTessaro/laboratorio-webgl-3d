@@ -1,0 +1,30 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Temporary and operating system files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local IDE settings
+.idea/
+.vscode/
