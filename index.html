@@ -124,16 +124,91 @@
             </button>
           </section>
 
+          <section class="lighting-controls" aria-labelledby="lighting-title">
+            <h3 id="lighting-title" class="control-section-title">Iluminação</h3>
+            <p class="lighting-description">
+              A luz ambiente ilumina a cena de forma uniforme. A luz direcional
+              vem de uma direção e cria contraste nas superfícies.
+            </p>
+
+            <label class="range-control" for="ambient-intensity">
+              <span class="range-label">
+                <span>Intensidade ambiente</span>
+                <output id="ambient-intensity-value" for="ambient-intensity">2,0</output>
+              </span>
+              <input
+                id="ambient-intensity"
+                type="range"
+                min="0"
+                max="4"
+                step="0.1"
+                value="2"
+                aria-label="Intensidade da luz ambiente"
+              />
+            </label>
+
+            <label class="range-control" for="directional-intensity">
+              <span class="range-label">
+                <span>Intensidade direcional</span>
+                <output id="directional-intensity-value" for="directional-intensity">3,0</output>
+              </span>
+              <input
+                id="directional-intensity"
+                type="range"
+                min="0"
+                max="5"
+                step="0.1"
+                value="3"
+                aria-label="Intensidade da luz direcional"
+              />
+            </label>
+
+            <label class="range-control" for="directional-x">
+              <span class="range-label">
+                <span>Direção horizontal (X)</span>
+                <output id="directional-x-value" for="directional-x">4,0</output>
+              </span>
+              <input
+                id="directional-x"
+                type="range"
+                min="-8"
+                max="8"
+                step="0.1"
+                value="4"
+                aria-label="Posição horizontal X da luz direcional"
+              />
+            </label>
+
+            <label class="range-control" for="directional-y">
+              <span class="range-label">
+                <span>Direção vertical (Y)</span>
+                <output id="directional-y-value" for="directional-y">7,0</output>
+              </span>
+              <input
+                id="directional-y"
+                type="range"
+                min="1"
+                max="10"
+                step="0.1"
+                value="7"
+                aria-label="Posição vertical Y da luz direcional"
+              />
+            </label>
+
+            <button class="reset-appearance reset-lighting" type="button" data-reset-lighting>
+              Restaurar iluminação
+            </button>
+          </section>
+
           <div class="coming-soon">
             <span class="coming-soon-icon" aria-hidden="true">✦</span>
             <h3>Seu espaço de criação</h3>
             <p>
-              Nas próximas etapas, você poderá explorar iluminação e animações.
+              Nas próximas etapas, você poderá explorar animações.
             </p>
           </div>
 
           <div class="reserved-controls" aria-label="Controles planejados para as próximas etapas">
-            <div><span class="control-dot"></span> Iluminação <span class="locked-label">EM BREVE</span></div>
             <div><span class="control-dot"></span> Animações <span class="locked-label">EM BREVE</span></div>
           </div>
           <p class="panel-footer">INTERAJA COM A CENA USANDO O MOUSE OU TOQUE</p>

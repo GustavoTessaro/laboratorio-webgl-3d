@@ -4,6 +4,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const MAX_PIXEL_RATIO = 2;
 const OBJECT_COLOR = '#6c8cff';
 const SOLID_MATERIAL = { color: OBJECT_COLOR, wireframe: false };
+const INITIAL_LIGHTING = {
+  ambientIntensity: 2,
+  directionalIntensity: 3,
+  directionalX: 4,
+  directionalY: 7,
+};
 
 const createGeometry = {
   box: () => new THREE.BoxGeometry(1.5, 1.5, 1.5),
@@ -84,14 +90,41 @@ export function createScene(container) {
   grid.position.y = 0;
   scene.add(grid);
 
-  const ambientLight = new THREE.HemisphereLight('#dce7ff', '#303747', 2);
+  const ambientLight = new THREE.HemisphereLight(
+    '#dce7ff',
+    '#303747',
+    INITIAL_LIGHTING.ambientIntensity,
+  );
   scene.add(ambientLight);
 
-  const keyLight = new THREE.DirectionalLight('#fff3dd', 3);
-  keyLight.position.set(4, 7, 5);
+  const keyLight = new THREE.DirectionalLight('#fff3dd', INITIAL_LIGHTING.directionalIntensity);
+  keyLight.position.set(INITIAL_LIGHTING.directionalX, INITIAL_LIGHTING.directionalY, 5);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(1024, 1024);
   scene.add(keyLight);
+
+  function setAmbientIntensity(intensity) {
+    ambientLight.intensity = intensity;
+  }
+
+  function setDirectionalIntensity(intensity) {
+    keyLight.intensity = intensity;
+  }
+
+  function setDirectionalX(x) {
+    keyLight.position.x = x;
+  }
+
+  function setDirectionalY(y) {
+    keyLight.position.y = y;
+  }
+
+  function resetLighting() {
+    ambientLight.intensity = INITIAL_LIGHTING.ambientIntensity;
+    keyLight.intensity = INITIAL_LIGHTING.directionalIntensity;
+    keyLight.position.set(INITIAL_LIGHTING.directionalX, INITIAL_LIGHTING.directionalY, 5);
+    return INITIAL_LIGHTING;
+  }
 
   function resizeRenderer() {
     const { width, height } = container.getBoundingClientRect();
@@ -113,5 +146,15 @@ export function createScene(container) {
   }
 
   renderer.setAnimationLoop(render);
-  return { selectObject, setColor, setWireframe, resetAppearance };
+  return {
+    selectObject,
+    setColor,
+    setWireframe,
+    resetAppearance,
+    setAmbientIntensity,
+    setDirectionalIntensity,
+    setDirectionalX,
+    setDirectionalY,
+    resetLighting,
+  };
 }

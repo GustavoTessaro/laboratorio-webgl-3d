@@ -8,6 +8,19 @@ const colorButtons = document.querySelectorAll('[data-object-color]');
 const materialButtons = document.querySelectorAll('[data-material-mode]');
 const customColorInput = document.querySelector('#custom-object-color');
 const resetAppearanceButton = document.querySelector('[data-reset-appearance]');
+const lightingInputs = {
+  ambientIntensity: document.querySelector('#ambient-intensity'),
+  directionalIntensity: document.querySelector('#directional-intensity'),
+  directionalX: document.querySelector('#directional-x'),
+  directionalY: document.querySelector('#directional-y'),
+};
+const lightingOutputs = {
+  ambientIntensity: document.querySelector('#ambient-intensity-value'),
+  directionalIntensity: document.querySelector('#directional-intensity-value'),
+  directionalX: document.querySelector('#directional-x-value'),
+  directionalY: document.querySelector('#directional-y-value'),
+};
+const resetLightingButton = document.querySelector('[data-reset-lighting]');
 
 try {
   const sceneControls = createScene(container);
@@ -62,11 +75,34 @@ try {
       button.setAttribute('aria-pressed', String(button.dataset.materialMode === 'solid'));
     });
   });
+
+  const lightingSetters = {
+    ambientIntensity: sceneControls.setAmbientIntensity,
+    directionalIntensity: sceneControls.setDirectionalIntensity,
+    directionalX: sceneControls.setDirectionalX,
+    directionalY: sceneControls.setDirectionalY,
+  };
+
+  Object.entries(lightingInputs).forEach(([key, input]) => {
+    input.addEventListener('input', () => {
+      const value = Number(input.value);
+      lightingSetters[key](value);
+      lightingOutputs[key].value = value.toFixed(1).replace('.', ',');
+    });
+  });
+
+  resetLightingButton.addEventListener('click', () => {
+    const defaults = sceneControls.resetLighting();
+    Object.entries(defaults).forEach(([key, value]) => {
+      lightingInputs[key].value = String(value);
+      lightingOutputs[key].value = value.toFixed(1).replace('.', ',');
+    });
+  });
 } catch (error) {
   console.error('Não foi possível inicializar o WebGL.', error);
   message.hidden = false;
   container.classList.add('scene-container--unsupported');
-  document.querySelectorAll('button, input[type="color"]').forEach((button) => {
-    button.disabled = true;
+  document.querySelectorAll('button, input').forEach((control) => {
+    control.disabled = true;
   });
 }
