@@ -282,6 +282,70 @@ h1 {
   padding: 22px 0 18px;
 }
 
+.object-controls {
+  padding: 19px 0 0;
+}
+
+.control-section-title {
+  margin: 0 0 10px;
+  color: #c7cedb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.object-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.object-option {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #2a303c;
+  border-radius: 8px;
+  background: #191e28;
+  color: #b7bfcc;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.object-option:hover {
+  border-color: #536391;
+  background: #202738;
+}
+
+.object-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.object-option[aria-pressed='true'] {
+  border-color: #7088e6;
+  background: #293456;
+  color: #e3e9ff;
+}
+
+.object-option[aria-pressed='true']::after {
+  color: #aebdff;
+  content: '✓';
+  font-size: 11px;
+}
+
+.object-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .coming-soon-icon {
   display: inline-block;
   margin-bottom: 9px;

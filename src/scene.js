@@ -2,6 +2,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const MAX_PIXEL_RATIO = 2;
+const OBJECT_COLOR = '#6c8cff';
+
+const createGeometry = {
+  box: () => new THREE.BoxGeometry(1.5, 1.5, 1.5),
+  sphere: () => new THREE.SphereGeometry(0.85, 32, 24),
+  pyramid: () => new THREE.ConeGeometry(0.85, 1.7, 4),
+  torus: () => new THREE.TorusGeometry(0.62, 0.23, 16, 48),
+};
 
 export function createScene(container) {
   const scene = new THREE.Scene();
@@ -24,18 +32,37 @@ export function createScene(container) {
   controls.maxDistance = 12;
   controls.target.set(0, 0.5, 0);
 
-  const cube = new THREE.Mesh(
-    new THREE.BoxGeometry(1.5, 1.5, 1.5),
-    new THREE.MeshStandardMaterial({
-      color: '#6c8cff',
-      roughness: 0.38,
-      metalness: 0.12,
-    }),
-  );
-  cube.position.y = 0.75;
-  cube.castShadow = true;
-  cube.receiveShadow = true;
-  scene.add(cube);
+  const material = new THREE.MeshStandardMaterial({
+    color: OBJECT_COLOR,
+    roughness: 0.38,
+    metalness: 0.12,
+  });
+  let currentShape = 'box';
+  let object = new THREE.Mesh(createGeometry[currentShape](), material);
+  object.position.y = 0.75;
+  object.castShadow = true;
+  object.receiveShadow = true;
+  scene.add(object);
+
+  function selectObject(shape) {
+    if (shape === currentShape) return;
+
+    const geometryFactory = createGeometry[shape];
+    if (!geometryFactory) {
+      throw new Error(`Forma geométrica desconhecida: ${shape}`);
+    }
+
+    const nextObject = new THREE.Mesh(geometryFactory(), material);
+    nextObject.position.y = shape === 'box' ? 0.75 : 0.85;
+    nextObject.castShadow = true;
+    nextObject.receiveShadow = true;
+
+    scene.remove(object);
+    object.geometry.dispose();
+    scene.add(nextObject);
+    object = nextObject;
+    currentShape = shape;
+  }
 
   const grid = new THREE.GridHelper(10, 20, '#68748a', '#343d4d');
   grid.position.y = 0;
@@ -70,4 +97,5 @@ export function createScene(container) {
   }
 
   renderer.setAnimationLoop(render);
+  return selectObject;
 }
