@@ -334,6 +334,8 @@ export function createScene(container) {
   let activeTransformMode = null;
   let orbitWasEnabled = controls.enabled;
   let gizmoPointerActive = false;
+  let manuallyRotatedEntity = null;
+  let resumeAutomaticRotation = false;
   entityRegistry.setSelectionChangeHandler((entity) => {
     if (!entity) {
       transformControls.detach();
@@ -351,8 +353,18 @@ export function createScene(container) {
       orbitWasEnabled = controls.enabled;
       controls.enabled = false;
       gizmoPointerActive = true;
+      if (activeTransformMode === 'rotate') {
+        manuallyRotatedEntity = entityRegistry.getSelectedEntity();
+        resumeAutomaticRotation = Boolean(manuallyRotatedEntity?.animation.enabled);
+        if (manuallyRotatedEntity) manuallyRotatedEntity.animation.enabled = false;
+      }
     } else {
       controls.enabled = orbitWasEnabled;
+      if (manuallyRotatedEntity && resumeAutomaticRotation) {
+        manuallyRotatedEntity.animation.enabled = true;
+      }
+      manuallyRotatedEntity = null;
+      resumeAutomaticRotation = false;
     }
   });
   transformControls.addEventListener('mouseDown', () => {
@@ -442,7 +454,7 @@ export function createScene(container) {
   renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
 
   function setTransformMode(mode) {
-    if (mode !== null && mode !== 'translate' && mode !== 'scale') {
+    if (mode !== null && !['translate', 'rotate', 'scale'].includes(mode)) {
       throw new Error(`Modo de transformação desconhecido: ${mode}`);
     }
     activeTransformMode = mode;
