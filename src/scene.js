@@ -21,16 +21,36 @@ const createGeometry = {
   torus: () => new THREE.TorusGeometry(0.62, 0.23, 16, 48),
 };
 
+const geometryNames = {
+  box: 'Cubo',
+  sphere: 'Esfera',
+  pyramid: 'Pirâmide',
+  torus: 'Toroide',
+};
+const spawnCoordinates = [-3.5, -1.75, 0, 1.75, 3.5]
+  .flatMap((z) => [-3.5, -1.75, 0, 1.75, 3.5].map((x) => ({ x, z })))
+  .filter(({ x, z }) => x !== 0 || z !== 0);
+
 export function createEntityRegistry(scene) {
   const entities = new Map();
+  const nameCounters = new Map();
   let selectedEntityId = null;
+  let nextSpawnIndex = 0;
 
-  function createEntity(type = 'box') {
+  function nextEntityName(type) {
+    const number = (nameCounters.get(type) ?? 0) + 1;
+    nameCounters.set(type, number);
+    return `${geometryNames[type]} ${number}`;
+  }
+
+  function createEntity(type = 'box', position = null) {
     const geometryFactory = createGeometry[type];
     if (!geometryFactory) {
       throw new Error(`Forma geométrica desconhecida: ${type}`);
     }
 
+    const spawn = position ?? spawnCoordinates[nextSpawnIndex % spawnCoordinates.length];
+    if (!position) nextSpawnIndex += 1;
     const id = crypto.randomUUID();
     const geometry = geometryFactory();
     const material = new THREE.MeshStandardMaterial({
@@ -40,12 +60,13 @@ export function createEntityRegistry(scene) {
       wireframe: SOLID_MATERIAL.wireframe,
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.y = type === 'box' ? 0.75 : 0.85;
+    mesh.position.set(spawn.x, type === 'box' ? 0.75 : 0.85, spawn.z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
     const entity = {
       id,
+      name: nextEntityName(type),
       type,
       mesh,
       color: OBJECT_COLOR,
@@ -117,6 +138,7 @@ export function createEntityRegistry(scene) {
     entity.mesh.geometry.dispose();
     entity.mesh.geometry = geometry;
     entity.mesh.position.y = type === 'box' ? 0.75 : 0.85;
+    entity.name = nextEntityName(type);
     entity.type = type;
   }
 
@@ -164,7 +186,7 @@ export function createScene(container) {
   controls.target.set(0, 0.5, 0);
 
   const entityRegistry = createEntityRegistry(scene);
-  entityRegistry.createEntity('box');
+  entityRegistry.createEntity('box', { x: 0, z: 0 });
 
   function selectObject(type) {
     entityRegistry.replaceGeometry(entityRegistry.getSelectedEntityOrThrow(), type);

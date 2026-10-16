@@ -278,6 +278,78 @@ h1 {
   font-weight: 600;
 }
 
+.scene-objects-controls {
+  padding: 19px 0 0;
+}
+
+.add-object-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.add-object-option,
+.scene-object-option {
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #2a303c;
+  border-radius: 8px;
+  background: #191e28;
+  color: #b7bfcc;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.add-object-option:hover,
+.scene-object-option:hover {
+  border-color: #536391;
+  background: #202738;
+}
+
+.add-object-option:focus-visible,
+.scene-object-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.scene-object-list {
+  display: grid;
+  max-height: 132px;
+  gap: 5px;
+  margin-top: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.scene-object-item {
+  min-width: 0;
+}
+
+.scene-object-option {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-object-option[aria-pressed='true'] {
+  border-color: #7088e6;
+  background: #293456;
+  color: #e3e9ff;
+}
+
+.scene-object-option[aria-pressed='true']::before {
+  margin-right: 6px;
+  color: #aebdff;
+  content: '✓';
+}
+
 .object-controls {
   padding: 19px 0 0;
 }

@@ -3,6 +3,8 @@ import { createScene } from './scene.js';
 
 const container = document.querySelector('#scene-container');
 const message = document.querySelector('#webgl-message');
+const addObjectButtons = document.querySelectorAll('[data-add-object]');
+const sceneObjectList = document.querySelector('#scene-object-list');
 const objectButtons = document.querySelectorAll('[data-object-shape]');
 const colorButtons = document.querySelectorAll('[data-object-color]');
 const materialButtons = document.querySelectorAll('[data-material-mode]');
@@ -31,15 +33,6 @@ const resetOrientationButton = document.querySelector('[data-reset-orientation]'
 try {
   const sceneControls = createScene(container);
 
-  objectButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      sceneControls.selectObject(button.dataset.objectShape);
-      objectButtons.forEach((option) => {
-        option.setAttribute('aria-pressed', String(option === button));
-      });
-    });
-  });
-
   function updateColorSelection(color) {
     const normalizedColor = color.toLowerCase();
     colorButtons.forEach((button) => {
@@ -51,35 +44,104 @@ try {
     customColorInput.value = normalizedColor;
   }
 
+  function updateObjectListSelection() {
+    const selectedId = sceneControls.getSelectedEntity()?.id;
+    sceneObjectList.querySelectorAll('[data-entity-id]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.entityId === selectedId));
+    });
+  }
+
+  function syncSelectedEntity() {
+    const entity = sceneControls.getSelectedEntity();
+    if (!entity) return;
+
+    objectButtons.forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.objectShape === entity.type));
+    });
+    updateColorSelection(entity.color);
+    materialButtons.forEach((button) => {
+      button.setAttribute('aria-pressed', String(
+        button.dataset.materialMode === entity.materialMode,
+      ));
+    });
+    rotationToggleButton.setAttribute('aria-pressed', String(entity.animation.enabled));
+    rotationToggleButton.textContent = entity.animation.enabled
+      ? 'Pausar rotação'
+      : 'Iniciar rotação';
+    rotationStatus.textContent = entity.animation.enabled
+      ? 'Animação ativa'
+      : 'Animação pausada';
+    rotationSpeedInput.value = String(entity.animation.speed);
+    rotationSpeedOutput.value = `${entity.animation.speed}°/s`;
+    rotationAxisButtons.forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.rotationAxis === entity.animation.axis));
+    });
+    updateObjectListSelection();
+  }
+
+  function renderEntityList() {
+    const items = sceneControls.getEntities().map((entity) => {
+      const item = document.createElement('div');
+      item.className = 'scene-object-item';
+      item.setAttribute('role', 'listitem');
+
+      const button = document.createElement('button');
+      button.className = 'scene-object-option';
+      button.type = 'button';
+      button.dataset.entityId = entity.id;
+      button.textContent = entity.name;
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', () => {
+        sceneControls.selectEntity(entity.id);
+        syncSelectedEntity();
+      });
+      item.append(button);
+      return item;
+    });
+    sceneObjectList.replaceChildren(...items);
+    updateObjectListSelection();
+  }
+
+  addObjectButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      sceneControls.createEntity(button.dataset.addObject);
+      renderEntityList();
+      syncSelectedEntity();
+    });
+  });
+
+  objectButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      sceneControls.selectObject(button.dataset.objectShape);
+      renderEntityList();
+      syncSelectedEntity();
+    });
+  });
+
   colorButtons.forEach((button) => {
     button.addEventListener('click', () => {
       const { objectColor } = button.dataset;
       sceneControls.setColor(objectColor);
-      updateColorSelection(objectColor);
+      syncSelectedEntity();
     });
   });
 
   customColorInput.addEventListener('input', () => {
     sceneControls.setColor(customColorInput.value);
-    updateColorSelection(customColorInput.value);
+    syncSelectedEntity();
   });
 
   materialButtons.forEach((button) => {
     button.addEventListener('click', () => {
       const { materialMode } = button.dataset;
       sceneControls.setWireframe(materialMode === 'wireframe');
-      materialButtons.forEach((option) => {
-        option.setAttribute('aria-pressed', String(option === button));
-      });
+      syncSelectedEntity();
     });
   });
 
   resetAppearanceButton.addEventListener('click', () => {
     sceneControls.resetAppearance();
-    updateColorSelection('#6c8cff');
-    materialButtons.forEach((button) => {
-      button.setAttribute('aria-pressed', String(button.dataset.materialMode === 'solid'));
-    });
+    syncSelectedEntity();
   });
 
   const lightingSetters = {
@@ -106,10 +168,8 @@ try {
   });
 
   rotationToggleButton.addEventListener('click', () => {
-    const isRotating = sceneControls.toggleRotation();
-    rotationToggleButton.setAttribute('aria-pressed', String(isRotating));
-    rotationToggleButton.textContent = isRotating ? 'Pausar rotação' : 'Iniciar rotação';
-    rotationStatus.textContent = isRotating ? 'Animação ativa' : 'Animação pausada';
+    sceneControls.toggleRotation();
+    syncSelectedEntity();
   });
 
   rotationSpeedInput.addEventListener('input', () => {
@@ -121,15 +181,16 @@ try {
   rotationAxisButtons.forEach((button) => {
     button.addEventListener('click', () => {
       sceneControls.setRotationAxis(button.dataset.rotationAxis);
-      rotationAxisButtons.forEach((option) => {
-        option.setAttribute('aria-pressed', String(option === button));
-      });
+      syncSelectedEntity();
     });
   });
 
   resetOrientationButton.addEventListener('click', () => {
     sceneControls.resetOrientation();
   });
+
+  renderEntityList();
+  syncSelectedEntity();
 } catch (error) {
   console.error('Não foi possível inicializar o WebGL.', error);
   message.hidden = false;

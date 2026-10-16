@@ -58,8 +58,24 @@
             </div>
           </div>
 
+          <section class="scene-objects-controls" aria-labelledby="scene-objects-title">
+            <h3 id="scene-objects-title" class="control-section-title">Objetos da cena</h3>
+            <div class="add-object-options" role="group" aria-label="Adicionar objeto à cena">
+              <button class="add-object-option" type="button" data-add-object="box">+ Cubo</button>
+              <button class="add-object-option" type="button" data-add-object="sphere">+ Esfera</button>
+              <button class="add-object-option" type="button" data-add-object="pyramid">+ Pirâmide</button>
+              <button class="add-object-option" type="button" data-add-object="torus">+ Toroide</button>
+            </div>
+            <div
+              id="scene-object-list"
+              class="scene-object-list"
+              role="list"
+              aria-label="Objetos presentes na cena"
+            ></div>
+          </section>
+
           <section class="object-controls" aria-labelledby="objects-title">
-            <h3 id="objects-title" class="control-section-title">Objetos</h3>
+            <h3 id="objects-title" class="control-section-title">Forma do objeto selecionado</h3>
             <div class="object-selector" role="group" aria-label="Escolha uma forma geométrica">
               <button class="object-option" type="button" data-object-shape="box" aria-pressed="true">
                 Cubo
