@@ -31,7 +31,11 @@
           </div>
 
           <div class="scene-frame">
-            <div id="scene-container" class="scene-container" aria-label="Cena 3D interativa com um cubo">
+            <div
+              id="scene-container"
+              class="scene-container"
+              aria-label="Cena 3D interativa. Clique ou toque em um objeto para selecioná-lo."
+            >
               <div id="webgl-message" class="webgl-message" role="status" hidden>
                 <span class="message-icon" aria-hidden="true">!</span>
                 <h2>Não foi possível iniciar a cena 3D</h2>
@@ -41,7 +45,9 @@
                 </p>
               </div>
             </div>
-            <div class="scene-hint" aria-hidden="true">
+            <div class="scene-hint">
+              <span>Clique/toque para selecionar</span>
+              <span class="hint-separator">·</span>
               <span>Arraste para orbitar</span>
               <span class="hint-separator">·</span>
               <span>Role ou aproxime para zoom</span>

@@ -93,7 +93,6 @@ try {
       button.setAttribute('aria-pressed', 'false');
       button.addEventListener('click', () => {
         sceneControls.selectEntity(entity.id);
-        syncSelectedEntity();
       });
       item.append(button);
       return item;
@@ -102,19 +101,20 @@ try {
     updateObjectListSelection();
   }
 
+  sceneControls.setSelectionChangeHandler(() => {
+    renderEntityList();
+    syncSelectedEntity();
+  });
+
   addObjectButtons.forEach((button) => {
     button.addEventListener('click', () => {
       sceneControls.createEntity(button.dataset.addObject);
-      renderEntityList();
-      syncSelectedEntity();
     });
   });
 
   objectButtons.forEach((button) => {
     button.addEventListener('click', () => {
       sceneControls.selectObject(button.dataset.objectShape);
-      renderEntityList();
-      syncSelectedEntity();
     });
   });
 
@@ -189,8 +189,6 @@ try {
     sceneControls.resetOrientation();
   });
 
-  renderEntityList();
-  syncSelectedEntity();
 } catch (error) {
   console.error('Não foi possível inicializar o WebGL.', error);
   message.hidden = false;

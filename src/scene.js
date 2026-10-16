@@ -36,6 +36,12 @@ export function createEntityRegistry(scene) {
   const nameCounters = new Map();
   let selectedEntityId = null;
   let nextSpawnIndex = 0;
+  let onSelectionChange = () => {};
+
+  function setSelectionChangeHandler(handler) {
+    onSelectionChange = handler;
+    onSelectionChange(getSelectedEntity());
+  }
 
   function nextEntityName(type) {
     const number = (nameCounters.get(type) ?? 0) + 1;
@@ -79,8 +85,10 @@ export function createEntityRegistry(scene) {
     };
 
     entities.set(id, entity);
+    mesh.userData.entityId = id;
     scene.add(mesh);
     selectedEntityId = id;
+    onSelectionChange(entity);
     return entity;
   }
 
@@ -101,7 +109,9 @@ export function createEntityRegistry(scene) {
       throw new Error(`Objeto desconhecido: ${id}`);
     }
     selectedEntityId = id;
-    return entities.get(id);
+    const entity = entities.get(id);
+    onSelectionChange(entity);
+    return entity;
   }
 
   function getSelectedEntityOrThrow() {
@@ -123,6 +133,7 @@ export function createEntityRegistry(scene) {
 
     if (selectedEntityId === id) {
       selectedEntityId = entities.keys().next().value ?? null;
+      onSelectionChange(getSelectedEntity());
     }
     return true;
   }
@@ -140,6 +151,7 @@ export function createEntityRegistry(scene) {
     entity.mesh.position.y = type === 'box' ? 0.75 : 0.85;
     entity.name = nextEntityName(type);
     entity.type = type;
+    if (entity.id === selectedEntityId) onSelectionChange(entity);
   }
 
   function updateAnimations(delta) {
@@ -153,6 +165,7 @@ export function createEntityRegistry(scene) {
 
   return {
     createEntity,
+    setSelectionChangeHandler,
     getEntity,
     getEntities,
     getSelectedEntity,
@@ -187,6 +200,92 @@ export function createScene(container) {
 
   const entityRegistry = createEntityRegistry(scene);
   entityRegistry.createEntity('box', { x: 0, z: 0 });
+  const selectionHelper = new THREE.BoxHelper(
+    entityRegistry.getSelectedEntityOrThrow().mesh,
+    '#f3d38a',
+  );
+  selectionHelper.material.transparent = true;
+  selectionHelper.material.opacity = 0.65;
+  selectionHelper.material.depthTest = false;
+  selectionHelper.material.depthWrite = false;
+  selectionHelper.renderOrder = 1;
+  selectionHelper.frustumCulled = false;
+  scene.add(selectionHelper);
+  entityRegistry.setSelectionChangeHandler((entity) => {
+    if (!entity) {
+      selectionHelper.visible = false;
+      return;
+    }
+    selectionHelper.setFromObject(entity.mesh);
+    selectionHelper.visible = true;
+  });
+
+  const raycaster = new THREE.Raycaster();
+  const normalizedPointer = new THREE.Vector2();
+  const CLICK_MOVE_THRESHOLD = 6;
+  const activePointers = new Set();
+  let pointerStart = null;
+
+  function handlePointerDown(event) {
+    activePointers.add(event.pointerId);
+    if (!event.isPrimary || event.button !== 0 || activePointers.size !== 1) {
+      pointerStart = null;
+      return;
+    }
+    pointerStart = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
+  }
+
+  function handlePointerMove(event) {
+    if (pointerStart?.pointerId !== event.pointerId) return;
+    if (
+      Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) >
+      CLICK_MOVE_THRESHOLD
+    ) {
+      pointerStart.moved = true;
+    }
+  }
+
+  function handlePointerUp(event) {
+    const start = pointerStart;
+    const isClickCandidate =
+      start?.pointerId === event.pointerId && !start.moved && activePointers.size === 1;
+    activePointers.delete(event.pointerId);
+    if (start?.pointerId === event.pointerId) pointerStart = null;
+    if (!isClickCandidate) return;
+
+    const movedX = event.clientX - start.x;
+    const movedY = event.clientY - start.y;
+    if (Math.hypot(movedX, movedY) > CLICK_MOVE_THRESHOLD) return;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    normalizedPointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(normalizedPointer, camera);
+    const meshes = entityRegistry.getEntities().map((entity) => entity.mesh);
+    const [intersection] = raycaster.intersectObjects(meshes, false);
+    if (!intersection) return;
+
+    const entity = entityRegistry.getEntity(intersection.object.userData.entityId);
+    if (entity) entityRegistry.selectEntity(entity.id);
+  }
+
+  function handlePointerCancel(event) {
+    activePointers.delete(event.pointerId);
+    if (pointerStart?.pointerId === event.pointerId) pointerStart = null;
+  }
+
+  renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+  renderer.domElement.addEventListener('pointermove', handlePointerMove);
+  renderer.domElement.addEventListener('pointerup', handlePointerUp);
+  renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
 
   function selectObject(type) {
     entityRegistry.replaceGeometry(entityRegistry.getSelectedEntityOrThrow(), type);
@@ -297,6 +396,8 @@ export function createScene(container) {
   function render() {
     const delta = Math.min(clock.getDelta(), MAX_FRAME_DELTA);
     entityRegistry.updateAnimations(delta);
+    const selectedEntity = entityRegistry.getSelectedEntity();
+    if (selectedEntity) selectionHelper.setFromObject(selectedEntity.mesh);
     controls.update();
     renderer.render(scene, camera);
   }
