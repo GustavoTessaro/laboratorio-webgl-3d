@@ -7,6 +7,8 @@ const addObjectButtons = document.querySelectorAll('[data-add-object]');
 const sceneObjectList = document.querySelector('#scene-object-list');
 const duplicateObjectButton = document.querySelector('[data-duplicate-object]');
 const deleteObjectButton = document.querySelector('[data-delete-object]');
+const copyPropertiesButton = document.querySelector('[data-copy-properties]');
+const applyPropertiesButton = document.querySelector('[data-apply-properties]');
 const objectActionMessage = document.querySelector('#object-action-message');
 const transformModeButtons = document.querySelectorAll('[data-transform-mode]');
 const objectButtons = document.querySelectorAll('[data-object-shape]');
@@ -74,6 +76,8 @@ try {
     });
     duplicateObjectButton.disabled = !hasSelection;
     deleteObjectButton.disabled = !hasSelection;
+    copyPropertiesButton.disabled = !hasSelection;
+    applyPropertiesButton.disabled = !hasSelection || !sceneControls.hasCopiedProperties();
     updateObjectListSelection();
     if (!entity) {
       [...objectButtons, ...colorButtons, ...materialButtons, ...rotationAxisButtons].forEach((button) => {
@@ -167,6 +171,21 @@ try {
     objectActionMessage.hidden = true;
     objectActionMessage.textContent = '';
     sceneControls.removeEntity(entity.id);
+  });
+
+  copyPropertiesButton.addEventListener('click', () => {
+    const entity = sceneControls.getSelectedEntity();
+    if (!entity) return;
+    sceneControls.copyEntityProperties(entity.id);
+    applyPropertiesButton.disabled = false;
+    objectActionMessage.hidden = true;
+    objectActionMessage.textContent = '';
+  });
+
+  applyPropertiesButton.addEventListener('click', () => {
+    const entity = sceneControls.getSelectedEntity();
+    if (!entity || !sceneControls.hasCopiedProperties()) return;
+    sceneControls.applyCopiedProperties(entity.id);
   });
 
   addObjectButtons.forEach((button) => {

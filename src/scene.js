@@ -50,6 +50,7 @@ export function createEntityRegistry(scene) {
   let selectedEntityId = null;
   let nextSpawnIndex = 0;
   let onSelectionChange = () => {};
+  let copiedProperties = null;
 
   function constrainEntity(entity) {
     const { mesh } = entity;
@@ -261,6 +262,47 @@ export function createEntityRegistry(scene) {
     });
   }
 
+  function copyEntityProperties(id) {
+    const entity = getEntity(id);
+    if (!entity) return false;
+
+    copiedProperties = {
+      color: entity.color,
+      materialMode: entity.materialMode,
+      scale: {
+        x: entity.mesh.scale.x,
+        y: entity.mesh.scale.y,
+        z: entity.mesh.scale.z,
+      },
+      animation: { ...entity.animation },
+    };
+    return true;
+  }
+
+  function applyCopiedProperties(id) {
+    const entity = getEntity(id);
+    if (!entity || !copiedProperties) return false;
+
+    entity.color = copiedProperties.color;
+    entity.materialMode = copiedProperties.materialMode;
+    entity.mesh.material.color.set(copiedProperties.color);
+    entity.mesh.material.wireframe = copiedProperties.materialMode === 'wireframe';
+    entity.mesh.material.needsUpdate = true;
+    entity.mesh.scale.set(
+      copiedProperties.scale.x,
+      copiedProperties.scale.y,
+      copiedProperties.scale.z,
+    );
+    entity.animation = { ...copiedProperties.animation };
+    constrainEntityScale(entity);
+    onSelectionChange(entity);
+    return true;
+  }
+
+  function hasCopiedProperties() {
+    return copiedProperties !== null;
+  }
+
   function getEntity(id) {
     return entities.get(id) ?? null;
   }
@@ -337,6 +379,9 @@ export function createEntityRegistry(scene) {
   return {
     createEntity,
     duplicateEntity,
+    copyEntityProperties,
+    applyCopiedProperties,
+    hasCopiedProperties,
     setSelectionChangeHandler,
     getEntity,
     getEntities,
