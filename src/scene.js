@@ -16,6 +16,8 @@ const INITIAL_ROTATION_SPEED = 45;
 const INITIAL_ROTATION_AXIS = 'y';
 const WORKSPACE_LIMIT = 10;
 const WORKSPACE_SIZE = WORKSPACE_LIMIT * 2;
+const WORKSPACE_HEIGHT = 10;
+const BOUNDS_EPSILON = 1e-6;
 const MIN_OBJECT_SCALE = 0.2;
 const MAX_OBJECT_SCALE = 3;
 
@@ -36,17 +38,39 @@ const spawnCoordinates = [-3.5, -1.75, 0, 1.75, 3.5]
   .flatMap((z) => [-3.5, -1.75, 0, 1.75, 3.5].map((x) => ({ x, z })))
   .filter(({ x, z }) => x !== 0 || z !== 0);
 
+export function synchronizeTransformTarget(transformControls, entity, mode) {
+  if (!entity) {
+    transformControls.detach();
+    transformControls.enabled = false;
+    transformControls.getHelper().visible = false;
+    return;
+  }
+
+  if (transformControls.object !== entity.mesh) {
+    transformControls.detach();
+    transformControls.attach(entity.mesh);
+  }
+  if (mode) transformControls.setMode(mode);
+  transformControls.enabled = Boolean(mode);
+  transformControls.getHelper().visible = Boolean(mode);
+}
+
 export function createEntityRegistry(scene) {
   const entities = new Map();
   const nameCounters = new Map();
   const entityBounds = new THREE.Box3();
   const entitySize = new THREE.Vector3();
-  const entityCenter = new THREE.Vector3();
   const positionCorrection = new THREE.Vector3();
+  const minimumScale = new THREE.Vector3(
+    MIN_OBJECT_SCALE,
+    MIN_OBJECT_SCALE,
+    MIN_OBJECT_SCALE,
+  );
   const previousScale = new THREE.Vector3();
   const candidateScale = new THREE.Vector3();
   const interpolatedScale = new THREE.Vector3();
   const validScales = new Map();
+  const validTransforms = new Map();
   let selectedEntityId = null;
   let nextSpawnIndex = 0;
   let onSelectionChange = () => {};
@@ -70,12 +94,24 @@ export function createEntityRegistry(scene) {
     }
 
     entityBounds.getSize(entitySize);
-    entityBounds.getCenter(entityCenter);
+    if (
+      entitySize.x > WORKSPACE_SIZE + BOUNDS_EPSILON ||
+      entitySize.y > WORKSPACE_HEIGHT + BOUNDS_EPSILON ||
+      entitySize.z > WORKSPACE_SIZE + BOUNDS_EPSILON
+    ) {
+      const validTransform = validTransforms.get(entity.id);
+      if (validTransform) {
+        mesh.position.copy(validTransform.position);
+        mesh.quaternion.copy(validTransform.quaternion);
+        mesh.scale.copy(validTransform.scale);
+        mesh.updateWorldMatrix(true, false);
+      }
+      return false;
+    }
+
     positionCorrection.set(0, 0, 0);
 
-    if (entitySize.x > WORKSPACE_SIZE) {
-      positionCorrection.x = -entityCenter.x;
-    } else if (entityBounds.min.x < -WORKSPACE_LIMIT) {
+    if (entityBounds.min.x < -WORKSPACE_LIMIT) {
       positionCorrection.x = -WORKSPACE_LIMIT - entityBounds.min.x;
     } else if (entityBounds.max.x > WORKSPACE_LIMIT) {
       positionCorrection.x = WORKSPACE_LIMIT - entityBounds.max.x;
@@ -83,11 +119,11 @@ export function createEntityRegistry(scene) {
 
     if (entityBounds.min.y < 0) {
       positionCorrection.y = -entityBounds.min.y;
+    } else if (entityBounds.max.y > WORKSPACE_HEIGHT) {
+      positionCorrection.y = WORKSPACE_HEIGHT - entityBounds.max.y;
     }
 
-    if (entitySize.z > WORKSPACE_SIZE) {
-      positionCorrection.z = -entityCenter.z;
-    } else if (entityBounds.min.z < -WORKSPACE_LIMIT) {
+    if (entityBounds.min.z < -WORKSPACE_LIMIT) {
       positionCorrection.z = -WORKSPACE_LIMIT - entityBounds.min.z;
     } else if (entityBounds.max.z > WORKSPACE_LIMIT) {
       positionCorrection.z = WORKSPACE_LIMIT - entityBounds.max.z;
@@ -97,6 +133,23 @@ export function createEntityRegistry(scene) {
       mesh.position.add(positionCorrection);
       mesh.updateWorldMatrix(true, false);
     }
+    entityBounds.setFromObject(mesh);
+    if (
+      entityBounds.min.x < -WORKSPACE_LIMIT - BOUNDS_EPSILON ||
+      entityBounds.max.x > WORKSPACE_LIMIT + BOUNDS_EPSILON ||
+      entityBounds.min.y < -BOUNDS_EPSILON ||
+      entityBounds.max.y > WORKSPACE_HEIGHT + BOUNDS_EPSILON ||
+      entityBounds.min.z < -WORKSPACE_LIMIT - BOUNDS_EPSILON ||
+      entityBounds.max.z > WORKSPACE_LIMIT + BOUNDS_EPSILON
+    ) {
+      return false;
+    }
+    validTransforms.set(entity.id, {
+      position: mesh.position.clone(),
+      quaternion: mesh.quaternion.clone(),
+      scale: mesh.scale.clone(),
+    });
+    return true;
   }
 
   function scaleFitsWorkspace(entity) {
@@ -104,7 +157,11 @@ export function createEntityRegistry(scene) {
     entityBounds.setFromObject(entity.mesh);
     if (entityBounds.isEmpty()) return false;
     entityBounds.getSize(entitySize);
-    return entitySize.x <= WORKSPACE_SIZE && entitySize.z <= WORKSPACE_SIZE;
+    return (
+      entitySize.x <= WORKSPACE_SIZE + BOUNDS_EPSILON &&
+      entitySize.y <= WORKSPACE_HEIGHT + BOUNDS_EPSILON &&
+      entitySize.z <= WORKSPACE_SIZE + BOUNDS_EPSILON
+    );
   }
 
   function constrainEntityScale(entity) {
@@ -125,6 +182,19 @@ export function createEntityRegistry(scene) {
         : previousScale.z,
     );
     mesh.scale.copy(candidateScale);
+    let baselineScale = previousScale;
+    if (!scaleFitsWorkspace(entity)) {
+      mesh.scale.copy(minimumScale);
+      if (!scaleFitsWorkspace(entity)) {
+        mesh.scale.copy(previousScale);
+        constrainEntity(entity);
+        stableScale.copy(mesh.scale);
+        return false;
+      }
+      baselineScale = minimumScale;
+    }
+    previousScale.copy(baselineScale);
+    mesh.scale.copy(candidateScale);
 
     if (!scaleFitsWorkspace(entity)) {
       let minimum = 0;
@@ -142,8 +212,12 @@ export function createEntityRegistry(scene) {
       mesh.scale.copy(interpolatedScale.lerpVectors(previousScale, candidateScale, minimum));
     }
 
-    constrainEntity(entity);
+    if (!constrainEntity(entity)) {
+      mesh.scale.copy(previousScale);
+      constrainEntity(entity);
+    }
     stableScale.copy(mesh.scale);
+    return true;
   }
 
   function setSelectionChangeHandler(handler) {
@@ -175,8 +249,9 @@ export function createEntityRegistry(scene) {
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(spawn.x, spawn.y ?? (type === 'box' ? 0.75 : 0.85), spawn.z);
-    if (position?.scale) mesh.scale.copy(position.scale);
+    const requestedScale = position?.scale?.clone() ?? mesh.scale.clone();
     if (position?.rotation) mesh.rotation.copy(position.rotation);
+    mesh.scale.copy(minimumScale);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
@@ -197,10 +272,12 @@ export function createEntityRegistry(scene) {
     material.wireframe = entity.materialMode === 'wireframe';
 
     entities.set(id, entity);
-    validScales.set(id, mesh.scale.clone());
+    validScales.set(id, minimumScale.clone());
     mesh.userData.entityId = id;
     scene.add(mesh);
     constrainEntity(entity);
+    mesh.scale.copy(requestedScale);
+    constrainEntityScale(entity);
     selectedEntityId = id;
     onSelectionChange(entity);
     return entity;
@@ -342,6 +419,7 @@ export function createEntityRegistry(scene) {
     entity.mesh.material.dispose();
     entities.delete(id);
     validScales.delete(id);
+    validTransforms.delete(id);
 
     if (selectedEntityId === id) {
       selectedEntityId = entities.keys().next().value ?? null;
@@ -413,9 +491,11 @@ export function createScene(container) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
-  controls.minDistance = 2.5;
-  controls.maxDistance = 12;
+  controls.minDistance = 1.8;
+  controls.maxDistance = 30;
   controls.target.set(0, 0.5, 0);
+  controls.cursor.set(0, 0.5, 0);
+  controls.maxTargetRadius = Math.hypot(12, 11.5, 12);
 
   const transformControls = new TransformControls(camera, renderer.domElement);
   transformControls.setMode('translate');
@@ -442,18 +522,30 @@ export function createScene(container) {
   let gizmoPointerActive = false;
   let manuallyRotatedEntity = null;
   let resumeAutomaticRotation = false;
-  entityRegistry.setSelectionChangeHandler((entity) => {
+  let selectionChangeObserver = () => {};
+
+  function synchronizeSelectedEntity() {
+    const entity = entityRegistry.getSelectedEntity();
+    synchronizeTransformTarget(transformControls, entity, activeTransformMode);
     if (!entity) {
-      transformControls.detach();
-      transformHelper.visible = false;
       selectionHelper.visible = false;
-      return;
+      return null;
     }
-    transformControls.attach(entity.mesh);
-    transformHelper.visible = Boolean(activeTransformMode);
+
     selectionHelper.setFromObject(entity.mesh);
     selectionHelper.visible = true;
+    return entity;
+  }
+
+  entityRegistry.setSelectionChangeHandler(() => {
+    const selectedEntity = synchronizeSelectedEntity();
+    selectionChangeObserver(selectedEntity);
   });
+
+  function setSelectionChangeHandler(handler) {
+    selectionChangeObserver = handler;
+    selectionChangeObserver(entityRegistry.getSelectedEntity());
+  }
 
   transformControls.addEventListener('dragging-changed', (event) => {
     if (event.value) {
@@ -566,8 +658,7 @@ export function createScene(container) {
     }
     activeTransformMode = mode;
     if (mode) transformControls.setMode(mode);
-    transformControls.enabled = Boolean(mode);
-    transformHelper.visible = Boolean(mode && entityRegistry.getSelectedEntity());
+    synchronizeSelectedEntity();
     controls.enabled = gizmoPointerActive ? false : orbitWasEnabled;
   }
 
@@ -699,6 +790,7 @@ export function createScene(container) {
   renderer.setAnimationLoop(render);
   return {
     ...entityRegistry,
+    setSelectionChangeHandler,
     removeEntity,
     setTransformMode,
     selectObject,
