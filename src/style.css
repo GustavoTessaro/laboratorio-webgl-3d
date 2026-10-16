@@ -90,6 +90,120 @@ a {
   color: var(--accent);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collaboration-status {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.collaboration-status[data-state='connected'] {
+  color: #75d5a8;
+}
+
+.collaboration-status[data-state='connecting'],
+.collaboration-status[data-state='reconnecting'] {
+  color: #f1c75b;
+}
+
+.collaboration-open,
+.collaboration-submit {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #465582;
+  border-radius: 8px;
+  background: #283453;
+  color: #dce4ff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.collaboration-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid #394256;
+  border-radius: 14px;
+  background: #1b202b;
+  color: #edf0f7;
+  box-shadow: 0 24px 80px #0009;
+}
+
+.collaboration-dialog::backdrop {
+  background: #07090dcc;
+  backdrop-filter: blur(3px);
+}
+
+.collaboration-dialog h2 {
+  margin-bottom: 10px;
+}
+
+.collaboration-dialog p:not(.eyebrow) {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.collaboration-dialog label {
+  display: block;
+  margin: 18px 0 7px;
+  color: #ccd2df;
+  font-size: 11px;
+}
+
+.collaboration-dialog input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #3b4353;
+  border-radius: 8px;
+  background: #11151d;
+  color: #f1f3f9;
+}
+
+.collaboration-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.collaboration-message {
+  min-height: 16px;
+  margin: 8px 0 0;
+  color: #f1c75b !important;
+}
+
+.participant-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.participant-list li {
+  padding: 7px 9px;
+  border: 1px solid #2d3544;
+  border-radius: 7px;
+  color: #c8cfdd;
+  font-size: 11px;
+}
+
+.participant-list li::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #68d3a1;
+  content: '';
+}
+
 .workspace {
   display: grid;
   width: min(1440px, 100%);
@@ -891,6 +1005,17 @@ h1 {
     padding: 0 20px;
   }
 
+  .topbar-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .collaboration-status {
+    width: 100%;
+    text-align: right;
+  }
+
   .workspace {
     grid-template-columns: 1fr;
     gap: 18px;
@@ -933,6 +1058,10 @@ h1 {
   .brand {
     gap: 8px;
     font-size: 12px;
+  }
+
+  .technology-badge {
+    display: none;
   }
 
   .scene-status {

@@ -2,6 +2,9 @@ node_modules/
 dist/
 dist-ssr/
 coverage/
+**/bin/
+**/obj/
+TestResults/
 
 # Logs
 *.log

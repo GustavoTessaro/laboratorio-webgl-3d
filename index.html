@@ -17,8 +17,31 @@
           <span class="brand-mark" aria-hidden="true">3D</span>
           <span>Laboratório <strong>WebGL 3D</strong></span>
         </a>
-        <span class="technology-badge">Three.js <span aria-hidden="true">·</span> WebGL</span>
+        <div class="topbar-actions">
+          <span id="collaboration-status" class="collaboration-status" data-state="disconnected" role="status">
+            Colaboração desconectada · modo local
+          </span>
+          <button id="collaboration-open" class="collaboration-open" type="button">
+            Entrar na sala
+          </button>
+          <span class="technology-badge">Three.js <span aria-hidden="true">·</span> WebGL</span>
+        </div>
       </header>
+
+      <dialog id="collaboration-dialog" class="collaboration-dialog" aria-labelledby="collaboration-title">
+        <form id="collaboration-form" method="dialog">
+          <p class="eyebrow">LABORATÓRIO COMPARTILHADO</p>
+          <h2 id="collaboration-title">Entrar na colaboração</h2>
+          <p>Escolha um nome de exibição para participar da sala compartilhada.</p>
+          <label for="collaboration-name">Nome de exibição</label>
+          <input id="collaboration-name" name="displayName" maxlength="32" required autocomplete="nickname" />
+          <p id="collaboration-message" class="collaboration-message" role="status" aria-live="polite"></p>
+          <div class="collaboration-dialog-actions">
+            <button class="object-action" type="button" data-collaboration-local>Continuar no modo local</button>
+            <button class="collaboration-submit" type="submit">Conectar</button>
+          </div>
+        </form>
+      </dialog>
 
       <main class="workspace">
         <section class="scene-panel" aria-labelledby="scene-title">
@@ -93,6 +116,13 @@
               </button>
             </div>
             <p id="object-action-message" class="object-action-message" role="status" aria-live="polite" hidden></p>
+          </section>
+
+          <section class="participants-controls" aria-labelledby="participants-title">
+            <h3 id="participants-title" class="control-section-title">Participantes na sala</h3>
+            <ul id="participant-list" class="participant-list" aria-live="polite">
+              <li>Nenhuma conexão ativa</li>
+            </ul>
           </section>
 
           <section class="object-movement-controls" aria-labelledby="movement-title">
