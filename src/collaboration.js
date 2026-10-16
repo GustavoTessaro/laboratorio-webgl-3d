@@ -6,11 +6,26 @@ import {
 
 export const COLLABORATION_PROTOCOL_VERSION = 1;
 export const COLLABORATION_ROOM_ID = 'laboratorio-principal';
-const HUB_URL = import.meta.env.VITE_COLLABORATION_URL
-  ?? 'http://localhost:5080/hubs/laboratory';
+const HUB_URL = import.meta.env.VITE_COLLABORATION_URL?.trim()
+  || (import.meta.env.DEV ? 'http://localhost:5080/hubs/laboratory' : null);
 
 export class CollaborationClient {
   constructor(handlers = {}) {
+    if (!HUB_URL) {
+      throw new Error('Configure VITE_COLLABORATION_URL para habilitar a colaboração.');
+    }
+    if (!import.meta.env.DEV) {
+      let hubUrl;
+      try {
+        hubUrl = new URL(HUB_URL);
+      } catch {
+        throw new Error('VITE_COLLABORATION_URL deve ser uma URL HTTPS absoluta.');
+      }
+      if (hubUrl.protocol !== 'https:' || hubUrl.pathname !== '/hubs/laboratory') {
+        throw new Error('VITE_COLLABORATION_URL deve usar HTTPS e terminar em /hubs/laboratory.');
+      }
+    }
+
     this.handlers = handlers;
     this.joined = false;
     this.displayName = '';

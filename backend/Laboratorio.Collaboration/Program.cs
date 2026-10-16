@@ -7,7 +7,25 @@ var builder = WebApplication.CreateBuilder(args);
 var frontendOrigins = builder.Configuration
     .GetSection("FrontendOrigins")
     .Get<string[]>()
-    ?? ["http://localhost:5173", "http://127.0.0.1:5173"];
+    ?? [];
+if (builder.Environment.IsProduction() && frontendOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "Configure FrontendOrigins com a origem HTTPS exata do frontend em produção.");
+}
+
+foreach (var origin in frontendOrigins)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var parsedOrigin) ||
+        parsedOrigin.Scheme is not ("http" or "https") ||
+        parsedOrigin.GetLeftPart(UriPartial.Authority) != origin ||
+        origin.Contains('*') ||
+        (builder.Environment.IsProduction() && parsedOrigin.Scheme != Uri.UriSchemeHttps))
+    {
+        throw new InvalidOperationException(
+            $"Origem CORS inválida: '{origin}'. Configure apenas origens exatas, sem caminhos ou curingas.");
+    }
+}
 
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 {
@@ -21,7 +39,8 @@ builder.Services.AddSignalR(options =>
     options.MaximumReceiveMessageSize = 256 * 1024;
 });
 builder.Services.AddSingleton<RoomStateStore>();
-var persistenceProvider = builder.Configuration["Persistence:Provider"] ?? "Sqlite";
+var persistenceProvider = builder.Configuration["Persistence:Provider"]
+    ?? (builder.Environment.IsDevelopment() ? "Sqlite" : "SqlServer");
 var roomConnectionString = builder.Configuration.GetConnectionString("RoomDatabase");
 switch (persistenceProvider.ToLowerInvariant())
 {
@@ -47,7 +66,12 @@ switch (persistenceProvider.ToLowerInvariant())
             $"Provedor de persistência desconhecido: {persistenceProvider}.");
 }
 
-builder.Services.AddSingleton<RoomPersistenceService>();
+builder.Services.AddSingleton(serviceProvider => new RoomPersistenceService(
+    serviceProvider.GetRequiredService<IDbContextFactory<RoomDbContext>>(),
+    serviceProvider.GetRequiredService<RoomStateStore>(),
+    serviceProvider.GetRequiredService<ILogger<RoomPersistenceService>>(),
+    builder.Configuration.GetValue<bool?>("Persistence:ApplyMigrationsOnStartup")
+        ?? builder.Environment.IsDevelopment()));
 builder.Services.AddHostedService(serviceProvider =>
     serviceProvider.GetRequiredService<RoomPersistenceService>());
 builder.Services.AddHostedService<LockLeaseCleanupService>();

@@ -6,6 +6,18 @@ coverage/
 **/obj/
 TestResults/
 backend/Laboratorio.Collaboration/App_Data/
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.sqlite3
+*.publishsettings
+*.pfx
+secrets.json
 
 # Logs
 *.log

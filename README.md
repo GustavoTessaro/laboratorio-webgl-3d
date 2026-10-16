@@ -101,3 +101,39 @@ npm run preview
 ```
 
 Os arquivos de produção são gerados na pasta `dist/`.
+
+## Preparar publicação no Azure
+
+A implantação prevista usa Azure Static Web Apps para o frontend, Azure App Service Linux (.NET 10) para o backend e Azure SQL Database. Os workflows de frontend e backend são independentes e publicam em pushes para `main` (ou por `workflow_dispatch`); não criam recursos nem contêm credenciais.
+
+### Configuração necessária
+
+1. Crie/configure os recursos Azure fora deste repositório. Use App Service Linux com runtime .NET 10, Azure SQL Database e Static Web Apps. Mantenha o backend em **uma instância** nesta versão.
+2. No App Service, configure:
+   - `Persistence__Provider`: `SqlServer`
+   - `Persistence__ApplyMigrationsOnStartup`: `false`
+   - `ConnectionStrings__RoomDatabase`: connection string da Azure SQL, configurada como segredo no App Service ou obtida de um cofre; nunca a versione.
+   - `FrontendOrigins__0`: a origem HTTPS exata do Static Web App, por exemplo `https://<nome>.azurestaticapps.net`, sem caminho, barra final ou curingas. Use índices adicionais (`FrontendOrigins__1`) somente para outras origens HTTPS explicitamente autorizadas.
+3. Configure o App Service para **HTTPS Only** e habilite WebSockets. A URL do hub deve usar HTTPS: `https://<nome>.azurewebsites.net/hubs/laboratory`. SignalR negocia WebSockets, com transporte de fallback do cliente se necessário. Como o frontend e a API têm origens diferentes, CORS precisa corresponder exatamente à origem HTTPS do frontend; CORS com credenciais e wildcard não é usado.
+4. Aplique as migrations à Azure SQL **antes de iniciar/publicar uma versão que dependa do schema**. No computador/runner que tenha acesso de rede autorizado ao banco, instale a ferramenta EF Core e configure `Persistence__Provider=SqlServer` e `ConnectionStrings__RoomDatabase` no ambiente seguro do processo. Depois execute:
+
+   ```powershell
+   dotnet tool install --global dotnet-ef --version 10.0.9
+   dotnet ef database update --project backend\Laboratorio.Collaboration --startup-project backend\Laboratorio.Collaboration
+   ```
+
+   Não inclua a connection string em scripts versionados nem a exponha em logs. A migration automática no startup fica habilitada em Development e desabilitada por padrão em produção para não exigir permissões de DDL para a identidade da aplicação. O backend ainda precisa conectar e ler o schema no startup; se Azure SQL estiver indisponível ou as migrations não tiverem sido aplicadas, a inicialização falha. O operador de deploy precisa de permissão para migrations; a identidade de runtime pode ter somente os direitos de dados necessários. Configure firewall/rede do SQL para permitir o App Service e o host de migration sem abrir acesso público irrestrito.
+5. Em **Settings → Secrets and variables → Actions** do GitHub, configure:
+   - Variable `AZURE_WEBAPP_NAME`: nome do App Service.
+   - Secret `AZURE_WEBAPP_PUBLISH_PROFILE`: publish profile do App Service.
+   - Variable `VITE_COLLABORATION_URL`: URL HTTPS completa do hub, incluindo `/hubs/laboratory`.
+   - Secret `AZURE_STATIC_WEB_APPS_API_TOKEN`: token de implantação do Static Web App.
+6. Após configurar a origem CORS e aplicar migrations, publique os dois workflows fazendo push para `main`, ou execute cada workflow manualmente em **Actions**. `VITE_COLLABORATION_URL` é incorporada durante o build do frontend; alterá-la exige novo build/publicação. Para publicar manualmente, use `npm ci` e `npm run build` na raiz, e `dotnet publish backend\Laboratorio.Collaboration\Laboratorio.Collaboration.csproj --configuration Release` para o backend.
+
+### Reconexão e limites desta etapa
+
+O cliente SignalR tenta reconectar após desconexões com intervalos de 0, 2, 5 e 10 segundos; após esgotar as tentativas, a colaboração fica desconectada até uma nova tentativa do usuário. Ao reconectar, ele entra novamente na sala e aplica o snapshot antes de reconciliar a fila offline já existente. A fila e edições locais não são duráveis após recarregar/fechar a página.
+
+Sala, participantes e bloqueios são mantidos na memória do backend. Escalar horizontalmente ou usar múltiplas instâncias quebraria a consistência de snapshots, locks e notificações SignalR; mantenha uma única instância e não habilite autoscale nesta versão. Reinícios e deploys desconectam participantes e liberam locks; apenas as entidades persistidas no Azure SQL sobrevivem. Não há Azure SignalR Service, afinidade distribuída, autenticação ou identidade gerenciada nesta etapa.
+
+Antes de habilitar recursos, consulte os preços e limites da região e dos planos escolhidos: App Service e Azure SQL podem gerar cobrança contínua; Static Web Apps depende do plano e tráfego. Monitore custos, compute, armazenamento, logs e largura de banda, e remova/desative recursos de teste quando não forem necessários.

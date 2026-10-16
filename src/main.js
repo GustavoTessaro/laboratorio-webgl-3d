@@ -491,10 +491,10 @@ try {
       return;
     }
 
-    const client = createCollaborationClient();
     collaborationOpenButton.disabled = true;
     showCollaborationMessage('');
     try {
+      const client = createCollaborationClient();
       await client.connect(displayName, sceneControls.getSharedEntities());
       collaborationDialog.close();
       collaborationOpenButton.textContent = 'Conectado';

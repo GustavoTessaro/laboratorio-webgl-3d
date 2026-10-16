@@ -7,7 +7,8 @@ namespace Laboratorio.Collaboration.Services;
 public sealed class RoomPersistenceService(
     IDbContextFactory<RoomDbContext> contextFactory,
     RoomStateStore store,
-    ILogger<RoomPersistenceService> logger) : IHostedService
+    ILogger<RoomPersistenceService> logger,
+    bool applyMigrationsOnStartup = true) : IHostedService
 {
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly Dictionary<string, EntityDto> _persistedEntities = new(StringComparer.Ordinal);
@@ -18,7 +19,10 @@ public sealed class RoomPersistenceService(
         try
         {
             await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-            await context.Database.MigrateAsync(cancellationToken);
+            if (applyMigrationsOnStartup)
+            {
+                await context.Database.MigrateAsync(cancellationToken);
+            }
 
             var roomId = CollaborationProtocol.RoomId;
             var roomExists = await context.Rooms
