@@ -14,6 +14,8 @@ const INITIAL_LIGHTING = {
 const MAX_FRAME_DELTA = 0.05;
 const INITIAL_ROTATION_SPEED = 45;
 const INITIAL_ROTATION_AXIS = 'y';
+const WORKSPACE_LIMIT = 10;
+const WORKSPACE_SIZE = WORKSPACE_LIMIT * 2;
 
 const createGeometry = {
   box: () => new THREE.BoxGeometry(1.5, 1.5, 1.5),
@@ -35,9 +37,60 @@ const spawnCoordinates = [-3.5, -1.75, 0, 1.75, 3.5]
 export function createEntityRegistry(scene) {
   const entities = new Map();
   const nameCounters = new Map();
+  const entityBounds = new THREE.Box3();
+  const entitySize = new THREE.Vector3();
+  const entityCenter = new THREE.Vector3();
+  const positionCorrection = new THREE.Vector3();
   let selectedEntityId = null;
   let nextSpawnIndex = 0;
   let onSelectionChange = () => {};
+
+  function constrainEntity(entity) {
+    const { mesh } = entity;
+    mesh.updateWorldMatrix(true, false);
+    entityBounds.setFromObject(mesh);
+    if (entityBounds.isEmpty()) return;
+
+    if (
+      !Number.isFinite(entityBounds.min.x) ||
+      !Number.isFinite(entityBounds.min.y) ||
+      !Number.isFinite(entityBounds.min.z) ||
+      !Number.isFinite(entityBounds.max.x) ||
+      !Number.isFinite(entityBounds.max.y) ||
+      !Number.isFinite(entityBounds.max.z)
+    ) {
+      return;
+    }
+
+    entityBounds.getSize(entitySize);
+    entityBounds.getCenter(entityCenter);
+    positionCorrection.set(0, 0, 0);
+
+    if (entitySize.x > WORKSPACE_SIZE) {
+      positionCorrection.x = -entityCenter.x;
+    } else if (entityBounds.min.x < -WORKSPACE_LIMIT) {
+      positionCorrection.x = -WORKSPACE_LIMIT - entityBounds.min.x;
+    } else if (entityBounds.max.x > WORKSPACE_LIMIT) {
+      positionCorrection.x = WORKSPACE_LIMIT - entityBounds.max.x;
+    }
+
+    if (entityBounds.min.y < 0) {
+      positionCorrection.y = -entityBounds.min.y;
+    }
+
+    if (entitySize.z > WORKSPACE_SIZE) {
+      positionCorrection.z = -entityCenter.z;
+    } else if (entityBounds.min.z < -WORKSPACE_LIMIT) {
+      positionCorrection.z = -WORKSPACE_LIMIT - entityBounds.min.z;
+    } else if (entityBounds.max.z > WORKSPACE_LIMIT) {
+      positionCorrection.z = WORKSPACE_LIMIT - entityBounds.max.z;
+    }
+
+    if (positionCorrection.lengthSq() > 0) {
+      mesh.position.add(positionCorrection);
+      mesh.updateWorldMatrix(true, false);
+    }
+  }
 
   function setSelectionChangeHandler(handler) {
     onSelectionChange = handler;
@@ -88,6 +141,7 @@ export function createEntityRegistry(scene) {
     entities.set(id, entity);
     mesh.userData.entityId = id;
     scene.add(mesh);
+    constrainEntity(entity);
     selectedEntityId = id;
     onSelectionChange(entity);
     return entity;
@@ -149,9 +203,9 @@ export function createEntityRegistry(scene) {
     const geometry = geometryFactory();
     entity.mesh.geometry.dispose();
     entity.mesh.geometry = geometry;
-    entity.mesh.position.y = type === 'box' ? 0.75 : 0.85;
     entity.name = nextEntityName(type);
     entity.type = type;
+    constrainEntity(entity);
     if (entity.id === selectedEntityId) onSelectionChange(entity);
   }
 
@@ -160,6 +214,7 @@ export function createEntityRegistry(scene) {
       if (entity.animation.enabled) {
         entity.mesh.rotation[entity.animation.axis] +=
           THREE.MathUtils.degToRad(entity.animation.speed) * delta;
+        constrainEntity(entity);
       }
     }
   }
@@ -174,6 +229,7 @@ export function createEntityRegistry(scene) {
     selectEntity,
     removeEntity,
     replaceGeometry,
+    constrainEntity,
     updateAnimations,
   };
 }
@@ -245,6 +301,10 @@ export function createScene(container) {
   transformControls.addEventListener('mouseDown', () => {
     gizmoPointerActive = true;
     pointerStart = null;
+  });
+  transformControls.addEventListener('objectChange', () => {
+    const entity = entityRegistry.getSelectedEntity();
+    if (entity) entityRegistry.constrainEntity(entity);
   });
 
   const raycaster = new THREE.Raycaster();
@@ -348,7 +408,7 @@ export function createScene(container) {
     setWireframe(SOLID_MATERIAL.wireframe);
   }
 
-  const grid = new THREE.GridHelper(10, 20, '#68748a', '#343d4d');
+  const grid = new THREE.GridHelper(WORKSPACE_SIZE, 40, '#68748a', '#343d4d');
   grid.position.y = 0;
   scene.add(grid);
 
