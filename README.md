@@ -67,6 +67,27 @@ dotnet ef database update \
   --startup-project backend/Laboratorio.Collaboration
 ```
 
+### Desenvolvimento com SQL Server LocalDB
+
+SQLite continua sendo o provider padrão no perfil `http`. Para executar com SQL Server LocalDB, use o perfil dedicado:
+
+```powershell
+dotnet run --project backend\Laboratorio.Collaboration --launch-profile localdb
+```
+
+Esse perfil usa `(localdb)\MSSQLLocalDB`, banco `LaboratorioWebGLDb` e migrations automáticas no startup em Development. Ele não inclui credenciais e não altera a configuração de produção. Para aplicar/verificar as migrations sem iniciar o servidor:
+
+```powershell
+$env:Persistence__Provider = 'SqlServer'
+$env:ConnectionStrings__RoomDatabase = 'Server=(localdb)\MSSQLLocalDB;Database=LaboratorioWebGLDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true'
+dotnet ef migrations script --project backend\Laboratorio.Collaboration --startup-project backend\Laboratorio.Collaboration --idempotent
+dotnet ef database update --project backend\Laboratorio.Collaboration --startup-project backend\Laboratorio.Collaboration
+```
+
+Para voltar ao SQLite, encerre o backend iniciado no perfil `localdb` e use `--launch-profile http` ou remova as variáveis `Persistence__Provider` e `ConnectionStrings__RoomDatabase` do processo. O SQLite permanece em `App_Data`; o LocalDB usa o banco local acima.
+
+A migration inicial existente escolhe tipos SQLite (`TEXT`, `REAL`, `INTEGER`) ou SQL Server (`nvarchar`, `float`, `bit`, `datetime2`) por `ActiveProvider`. O script SQL Server deve ser gerado/inspecionado antes de aplicá-la a um destino SQL Server; o histórico de migrations é criado pelo EF Core em `dbo.__EFMigrationsHistory`. O snapshot EF atual foi originalmente gerado pelo provider SQLite e conserva tipos SQLite: não o use como prova de equivalência para futuras alterações do modelo. Antes de criar novas migrations para evoluir ambos os providers, alinhe e verifique snapshots/geração por provider (ou mantenha conjuntos de migrations separados). Schema Compare deve comparar o banco `LaboratorioWebGLDb` com o banco-alvo correto, revisar cuidadosamente tipos, chaves e cascatas, excluir `dbo.__EFMigrationsHistory` das alterações propostas e nunca publicar operações destrutivas ou alterações de dados sem revisão.
+
 Para criar uma migration após uma futura alteração no modelo:
 
 ```sh

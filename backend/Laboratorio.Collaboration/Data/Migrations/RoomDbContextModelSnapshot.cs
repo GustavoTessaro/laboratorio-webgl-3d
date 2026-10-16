@@ -20,74 +20,55 @@ namespace Laboratorio.Collaboration.Data.Migrations
             modelBuilder.Entity("Laboratorio.Collaboration.Data.RoomEntityRecord", b =>
                 {
                     b.Property<string>("RoomId")
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(128);
 
                     b.Property<string>("Id")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(36);
 
                     b.Property<string>("AnimationAxis")
                         .IsRequired()
-                        .HasMaxLength(1)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(1);
 
-                    b.Property<bool>("AnimationEnabled")
-                        .HasColumnType("INTEGER");
+                    b.Property<bool>("AnimationEnabled");
 
-                    b.Property<double>("AnimationSpeed")
-                        .HasColumnType("REAL");
+                    b.Property<double>("AnimationSpeed");
 
                     b.Property<string>("Color")
                         .IsRequired()
-                        .HasMaxLength(7)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(7);
 
                     b.Property<string>("LastEditor")
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(32);
 
                     b.Property<string>("MaterialMode")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(16);
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(64);
 
-                    b.Property<double>("PositionX")
-                        .HasColumnType("REAL");
+                    b.Property<double>("PositionX");
 
-                    b.Property<double>("PositionY")
-                        .HasColumnType("REAL");
+                    b.Property<double>("PositionY");
 
-                    b.Property<double>("PositionZ")
-                        .HasColumnType("REAL");
+                    b.Property<double>("PositionZ");
 
-                    b.Property<double>("RotationX")
-                        .HasColumnType("REAL");
+                    b.Property<double>("RotationX");
 
-                    b.Property<double>("RotationY")
-                        .HasColumnType("REAL");
+                    b.Property<double>("RotationY");
 
-                    b.Property<double>("RotationZ")
-                        .HasColumnType("REAL");
+                    b.Property<double>("RotationZ");
 
-                    b.Property<double>("ScaleX")
-                        .HasColumnType("REAL");
+                    b.Property<double>("ScaleX");
 
-                    b.Property<double>("ScaleY")
-                        .HasColumnType("REAL");
+                    b.Property<double>("ScaleY");
 
-                    b.Property<double>("ScaleZ")
-                        .HasColumnType("REAL");
+                    b.Property<double>("ScaleZ");
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(16);
 
                     b.HasKey("RoomId", "Id");
 
@@ -97,11 +78,9 @@ namespace Laboratorio.Collaboration.Data.Migrations
             modelBuilder.Entity("Laboratorio.Collaboration.Data.RoomRecord", b =>
                 {
                     b.Property<string>("RoomId")
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(128);
 
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                    b.Property<DateTime>("UpdatedAtUtc");
 
                     b.HasKey("RoomId");
 
