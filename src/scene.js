@@ -21,6 +21,127 @@ const createGeometry = {
   torus: () => new THREE.TorusGeometry(0.62, 0.23, 16, 48),
 };
 
+export function createEntityRegistry(scene) {
+  const entities = new Map();
+  let selectedEntityId = null;
+
+  function createEntity(type = 'box') {
+    const geometryFactory = createGeometry[type];
+    if (!geometryFactory) {
+      throw new Error(`Forma geométrica desconhecida: ${type}`);
+    }
+
+    const id = crypto.randomUUID();
+    const geometry = geometryFactory();
+    const material = new THREE.MeshStandardMaterial({
+      color: OBJECT_COLOR,
+      roughness: 0.38,
+      metalness: 0.12,
+      wireframe: SOLID_MATERIAL.wireframe,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.y = type === 'box' ? 0.75 : 0.85;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    const entity = {
+      id,
+      type,
+      mesh,
+      color: OBJECT_COLOR,
+      materialMode: 'solid',
+      animation: {
+        enabled: false,
+        axis: INITIAL_ROTATION_AXIS,
+        speed: INITIAL_ROTATION_SPEED,
+      },
+    };
+
+    entities.set(id, entity);
+    scene.add(mesh);
+    selectedEntityId = id;
+    return entity;
+  }
+
+  function getEntity(id) {
+    return entities.get(id) ?? null;
+  }
+
+  function getEntities() {
+    return Array.from(entities.values());
+  }
+
+  function getSelectedEntity() {
+    return getEntity(selectedEntityId);
+  }
+
+  function selectEntity(id) {
+    if (!entities.has(id)) {
+      throw new Error(`Objeto desconhecido: ${id}`);
+    }
+    selectedEntityId = id;
+    return entities.get(id);
+  }
+
+  function getSelectedEntityOrThrow() {
+    const entity = getSelectedEntity();
+    if (!entity) {
+      throw new Error('Não há objeto selecionado.');
+    }
+    return entity;
+  }
+
+  function removeEntity(id) {
+    const entity = entities.get(id);
+    if (!entity) return false;
+
+    scene.remove(entity.mesh);
+    entity.mesh.geometry.dispose();
+    entity.mesh.material.dispose();
+    entities.delete(id);
+
+    if (selectedEntityId === id) {
+      selectedEntityId = entities.keys().next().value ?? null;
+    }
+    return true;
+  }
+
+  function replaceGeometry(entity, type) {
+    const geometryFactory = createGeometry[type];
+    if (!geometryFactory) {
+      throw new Error(`Forma geométrica desconhecida: ${type}`);
+    }
+    if (type === entity.type) return;
+
+    const geometry = geometryFactory();
+    entity.mesh.geometry.dispose();
+    entity.mesh.geometry = geometry;
+    entity.mesh.position.y = type === 'box' ? 0.75 : 0.85;
+    entity.type = type;
+  }
+
+  function updateAnimations(delta) {
+    for (const entity of entities.values()) {
+      if (entity.animation.enabled) {
+        entity.mesh.rotation[entity.animation.axis] +=
+          THREE.MathUtils.degToRad(entity.animation.speed) * delta;
+      }
+    }
+  }
+
+  return {
+    createEntity,
+    getEntity,
+    getEntities,
+    getSelectedEntity,
+    getSelectedEntityOrThrow,
+    selectEntity,
+    removeEntity,
+    replaceGeometry,
+    updateAnimations,
+  };
+}
+
 export function createScene(container) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#171c26');
@@ -42,49 +163,24 @@ export function createScene(container) {
   controls.maxDistance = 12;
   controls.target.set(0, 0.5, 0);
 
-  const material = new THREE.MeshStandardMaterial({
-    color: SOLID_MATERIAL.color,
-    roughness: 0.38,
-    metalness: 0.12,
-    wireframe: SOLID_MATERIAL.wireframe,
-  });
-  let currentShape = 'box';
-  let object = new THREE.Mesh(createGeometry[currentShape](), material);
-  object.position.y = 0.75;
-  object.castShadow = true;
-  object.receiveShadow = true;
-  scene.add(object);
-  let isRotating = false;
-  let rotationSpeed = INITIAL_ROTATION_SPEED;
-  let rotationAxis = INITIAL_ROTATION_AXIS;
+  const entityRegistry = createEntityRegistry(scene);
+  entityRegistry.createEntity('box');
 
-  function selectObject(shape) {
-    if (shape === currentShape) return;
-
-    const geometryFactory = createGeometry[shape];
-    if (!geometryFactory) {
-      throw new Error(`Forma geométrica desconhecida: ${shape}`);
-    }
-
-    const nextObject = new THREE.Mesh(geometryFactory(), material);
-    nextObject.position.y = shape === 'box' ? 0.75 : 0.85;
-    nextObject.castShadow = true;
-    nextObject.receiveShadow = true;
-
-    scene.remove(object);
-    object.geometry.dispose();
-    scene.add(nextObject);
-    object = nextObject;
-    currentShape = shape;
+  function selectObject(type) {
+    entityRegistry.replaceGeometry(entityRegistry.getSelectedEntityOrThrow(), type);
   }
 
   function setColor(color) {
-    material.color.set(color);
+    const entity = entityRegistry.getSelectedEntityOrThrow();
+    entity.color = `#${new THREE.Color(color).getHexString()}`;
+    entity.mesh.material.color.set(color);
   }
 
   function setWireframe(wireframe) {
-    material.wireframe = wireframe;
-    material.needsUpdate = true;
+    const entity = entityRegistry.getSelectedEntityOrThrow();
+    entity.materialMode = wireframe ? 'wireframe' : 'solid';
+    entity.mesh.material.wireframe = wireframe;
+    entity.mesh.material.needsUpdate = true;
   }
 
   function resetAppearance() {
@@ -133,23 +229,24 @@ export function createScene(container) {
   }
 
   function toggleRotation() {
-    isRotating = !isRotating;
-    return isRotating;
+    const entity = entityRegistry.getSelectedEntityOrThrow();
+    entity.animation.enabled = !entity.animation.enabled;
+    return entity.animation.enabled;
   }
 
   function setRotationSpeed(degreesPerSecond) {
-    rotationSpeed = THREE.MathUtils.degToRad(degreesPerSecond);
+    entityRegistry.getSelectedEntityOrThrow().animation.speed = degreesPerSecond;
   }
 
   function setRotationAxis(axis) {
     if (!['x', 'y', 'z'].includes(axis)) {
       throw new Error(`Eixo de rotação desconhecido: ${axis}`);
     }
-    rotationAxis = axis;
+    entityRegistry.getSelectedEntityOrThrow().animation.axis = axis;
   }
 
   function resetOrientation() {
-    object.rotation.set(0, 0, 0);
+    entityRegistry.getSelectedEntityOrThrow().mesh.rotation.set(0, 0, 0);
   }
 
   function resizeRenderer() {
@@ -177,15 +274,14 @@ export function createScene(container) {
 
   function render() {
     const delta = Math.min(clock.getDelta(), MAX_FRAME_DELTA);
-    if (isRotating) {
-      object.rotation[rotationAxis] += rotationSpeed * delta;
-    }
+    entityRegistry.updateAnimations(delta);
     controls.update();
     renderer.render(scene, camera);
   }
 
   renderer.setAnimationLoop(render);
   return {
+    ...entityRegistry,
     selectObject,
     setColor,
     setWireframe,
