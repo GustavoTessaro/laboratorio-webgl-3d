@@ -16,6 +16,8 @@ const INITIAL_ROTATION_SPEED = 45;
 const INITIAL_ROTATION_AXIS = 'y';
 const WORKSPACE_LIMIT = 10;
 const WORKSPACE_SIZE = WORKSPACE_LIMIT * 2;
+const MIN_OBJECT_SCALE = 0.2;
+const MAX_OBJECT_SCALE = 3;
 
 const createGeometry = {
   box: () => new THREE.BoxGeometry(1.5, 1.5, 1.5),
@@ -41,6 +43,10 @@ export function createEntityRegistry(scene) {
   const entitySize = new THREE.Vector3();
   const entityCenter = new THREE.Vector3();
   const positionCorrection = new THREE.Vector3();
+  const previousScale = new THREE.Vector3();
+  const candidateScale = new THREE.Vector3();
+  const interpolatedScale = new THREE.Vector3();
+  const validScales = new Map();
   let selectedEntityId = null;
   let nextSpawnIndex = 0;
   let onSelectionChange = () => {};
@@ -92,6 +98,53 @@ export function createEntityRegistry(scene) {
     }
   }
 
+  function scaleFitsWorkspace(entity) {
+    entity.mesh.updateWorldMatrix(true, false);
+    entityBounds.setFromObject(entity.mesh);
+    if (entityBounds.isEmpty()) return false;
+    entityBounds.getSize(entitySize);
+    return entitySize.x <= WORKSPACE_SIZE && entitySize.z <= WORKSPACE_SIZE;
+  }
+
+  function constrainEntityScale(entity) {
+    const { mesh } = entity;
+    const stableScale = validScales.get(entity.id);
+    if (!stableScale) return;
+
+    previousScale.copy(stableScale);
+    candidateScale.set(
+      Number.isFinite(mesh.scale.x)
+        ? THREE.MathUtils.clamp(mesh.scale.x, MIN_OBJECT_SCALE, MAX_OBJECT_SCALE)
+        : previousScale.x,
+      Number.isFinite(mesh.scale.y)
+        ? THREE.MathUtils.clamp(mesh.scale.y, MIN_OBJECT_SCALE, MAX_OBJECT_SCALE)
+        : previousScale.y,
+      Number.isFinite(mesh.scale.z)
+        ? THREE.MathUtils.clamp(mesh.scale.z, MIN_OBJECT_SCALE, MAX_OBJECT_SCALE)
+        : previousScale.z,
+    );
+    mesh.scale.copy(candidateScale);
+
+    if (!scaleFitsWorkspace(entity)) {
+      let minimum = 0;
+      let maximum = 1;
+      for (let iteration = 0; iteration < 24; iteration += 1) {
+        const factor = (minimum + maximum) / 2;
+        interpolatedScale.lerpVectors(previousScale, candidateScale, factor);
+        mesh.scale.copy(interpolatedScale);
+        if (scaleFitsWorkspace(entity)) {
+          minimum = factor;
+        } else {
+          maximum = factor;
+        }
+      }
+      mesh.scale.copy(interpolatedScale.lerpVectors(previousScale, candidateScale, minimum));
+    }
+
+    constrainEntity(entity);
+    stableScale.copy(mesh.scale);
+  }
+
   function setSelectionChangeHandler(handler) {
     onSelectionChange = handler;
     onSelectionChange(getSelectedEntity());
@@ -139,6 +192,7 @@ export function createEntityRegistry(scene) {
     };
 
     entities.set(id, entity);
+    validScales.set(id, new THREE.Vector3(1, 1, 1));
     mesh.userData.entityId = id;
     scene.add(mesh);
     constrainEntity(entity);
@@ -185,6 +239,7 @@ export function createEntityRegistry(scene) {
     entity.mesh.geometry.dispose();
     entity.mesh.material.dispose();
     entities.delete(id);
+    validScales.delete(id);
 
     if (selectedEntityId === id) {
       selectedEntityId = entities.keys().next().value ?? null;
@@ -205,7 +260,7 @@ export function createEntityRegistry(scene) {
     entity.mesh.geometry = geometry;
     entity.name = nextEntityName(type);
     entity.type = type;
-    constrainEntity(entity);
+    constrainEntityScale(entity);
     if (entity.id === selectedEntityId) onSelectionChange(entity);
   }
 
@@ -230,6 +285,7 @@ export function createEntityRegistry(scene) {
     removeEntity,
     replaceGeometry,
     constrainEntity,
+    constrainEntityScale,
     updateAnimations,
   };
 }
@@ -275,7 +331,7 @@ export function createScene(container) {
   selectionHelper.renderOrder = 1;
   selectionHelper.frustumCulled = false;
   scene.add(selectionHelper);
-  let moveModeEnabled = false;
+  let activeTransformMode = null;
   let orbitWasEnabled = controls.enabled;
   let gizmoPointerActive = false;
   entityRegistry.setSelectionChangeHandler((entity) => {
@@ -285,6 +341,7 @@ export function createScene(container) {
       return;
     }
     transformControls.attach(entity.mesh);
+    transformHelper.visible = Boolean(activeTransformMode);
     selectionHelper.setFromObject(entity.mesh);
     selectionHelper.visible = true;
   });
@@ -304,7 +361,12 @@ export function createScene(container) {
   });
   transformControls.addEventListener('objectChange', () => {
     const entity = entityRegistry.getSelectedEntity();
-    if (entity) entityRegistry.constrainEntity(entity);
+    if (!entity) return;
+    if (activeTransformMode === 'scale') {
+      entityRegistry.constrainEntityScale(entity);
+    } else {
+      entityRegistry.constrainEntity(entity);
+    }
   });
 
   const raycaster = new THREE.Raycaster();
@@ -379,11 +441,15 @@ export function createScene(container) {
   renderer.domElement.addEventListener('pointerup', handlePointerUp);
   renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
 
-  function setMoveMode(enabled) {
-    moveModeEnabled = Boolean(enabled);
-    transformControls.enabled = moveModeEnabled;
-    transformHelper.visible = moveModeEnabled && Boolean(entityRegistry.getSelectedEntity());
-    controls.enabled = moveModeEnabled && gizmoPointerActive ? false : orbitWasEnabled;
+  function setTransformMode(mode) {
+    if (mode !== null && mode !== 'translate' && mode !== 'scale') {
+      throw new Error(`Modo de transformação desconhecido: ${mode}`);
+    }
+    activeTransformMode = mode;
+    if (mode) transformControls.setMode(mode);
+    transformControls.enabled = Boolean(mode);
+    transformHelper.visible = Boolean(mode && entityRegistry.getSelectedEntity());
+    controls.enabled = gizmoPointerActive ? false : orbitWasEnabled;
   }
 
   function selectObject(type) {
@@ -507,7 +573,7 @@ export function createScene(container) {
   renderer.setAnimationLoop(render);
   return {
     ...entityRegistry,
-    setMoveMode,
+    setTransformMode,
     selectObject,
     setColor,
     setWireframe,

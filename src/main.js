@@ -5,7 +5,7 @@ const container = document.querySelector('#scene-container');
 const message = document.querySelector('#webgl-message');
 const addObjectButtons = document.querySelectorAll('[data-add-object]');
 const sceneObjectList = document.querySelector('#scene-object-list');
-const movementToggle = document.querySelector('[data-toggle-movement]');
+const transformModeButtons = document.querySelectorAll('[data-transform-mode]');
 const objectButtons = document.querySelectorAll('[data-object-shape]');
 const colorButtons = document.querySelectorAll('[data-object-color]');
 const materialButtons = document.querySelectorAll('[data-material-mode]');
@@ -107,11 +107,16 @@ try {
     syncSelectedEntity();
   });
 
-  movementToggle.addEventListener('click', () => {
-    const isEnabled = movementToggle.getAttribute('aria-pressed') !== 'true';
-    sceneControls.setMoveMode(isEnabled);
-    movementToggle.setAttribute('aria-pressed', String(isEnabled));
-    movementToggle.textContent = isEnabled ? 'Finalizar movimentação' : 'Mover objeto';
+  transformModeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const mode = button.getAttribute('aria-pressed') === 'true'
+        ? null
+        : button.dataset.transformMode;
+      sceneControls.setTransformMode(mode);
+      transformModeButtons.forEach((option) => {
+        option.setAttribute('aria-pressed', String(option === button && mode !== null));
+      });
+    });
   });
 
   addObjectButtons.forEach((button) => {

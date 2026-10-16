@@ -362,7 +362,13 @@ h1 {
   padding: 19px 0 0;
 }
 
+.object-movement-controls .control-section-title {
+  margin-bottom: 10px;
+}
+
 .movement-toggle {
+  display: block;
+  width: 100%;
   min-height: 36px;
   padding: 7px 10px;
   border: 1px solid #2a303c;
@@ -375,6 +381,10 @@ h1 {
     border-color 140ms ease,
     background-color 140ms ease,
     color 140ms ease;
+}
+
+.movement-toggle + .movement-toggle {
+  margin-top: 6px;
 }
 
 .movement-toggle:hover {
