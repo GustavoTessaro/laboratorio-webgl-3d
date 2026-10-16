@@ -5,6 +5,9 @@ const container = document.querySelector('#scene-container');
 const message = document.querySelector('#webgl-message');
 const addObjectButtons = document.querySelectorAll('[data-add-object]');
 const sceneObjectList = document.querySelector('#scene-object-list');
+const duplicateObjectButton = document.querySelector('[data-duplicate-object]');
+const deleteObjectButton = document.querySelector('[data-delete-object]');
+const objectActionMessage = document.querySelector('#object-action-message');
 const transformModeButtons = document.querySelectorAll('[data-transform-mode]');
 const objectButtons = document.querySelectorAll('[data-object-shape]');
 const colorButtons = document.querySelectorAll('[data-object-color]');
@@ -54,7 +57,36 @@ try {
 
   function syncSelectedEntity() {
     const entity = sceneControls.getSelectedEntity();
-    if (!entity) return;
+    const hasSelection = Boolean(entity);
+    const selectionDependentControls = [
+      ...objectButtons,
+      ...colorButtons,
+      customColorInput,
+      ...materialButtons,
+      resetAppearanceButton,
+      rotationToggleButton,
+      rotationSpeedInput,
+      ...rotationAxisButtons,
+      resetOrientationButton,
+    ];
+    selectionDependentControls.forEach((control) => {
+      control.disabled = !hasSelection;
+    });
+    duplicateObjectButton.disabled = !hasSelection;
+    deleteObjectButton.disabled = !hasSelection;
+    updateObjectListSelection();
+    if (!entity) {
+      [...objectButtons, ...colorButtons, ...materialButtons, ...rotationAxisButtons].forEach((button) => {
+        button.setAttribute('aria-pressed', 'false');
+      });
+      customColorInput.value = '#6c8cff';
+      rotationToggleButton.setAttribute('aria-pressed', 'false');
+      rotationToggleButton.textContent = 'Iniciar rotação';
+      rotationSpeedInput.value = '45';
+      rotationSpeedOutput.value = '45°/s';
+      rotationStatus.textContent = 'Nenhum objeto selecionado';
+      return;
+    }
 
     objectButtons.forEach((button) => {
       button.setAttribute('aria-pressed', String(button.dataset.objectShape === entity.type));
@@ -77,7 +109,6 @@ try {
     rotationAxisButtons.forEach((button) => {
       button.setAttribute('aria-pressed', String(button.dataset.rotationAxis === entity.animation.axis));
     });
-    updateObjectListSelection();
   }
 
   function renderEntityList() {
@@ -117,6 +148,25 @@ try {
         option.setAttribute('aria-pressed', String(option === button && mode !== null));
       });
     });
+  });
+
+  duplicateObjectButton.addEventListener('click', () => {
+    const entity = sceneControls.getSelectedEntity();
+    if (!entity) return;
+
+    const duplicate = sceneControls.duplicateEntity(entity.id);
+    objectActionMessage.hidden = Boolean(duplicate);
+    objectActionMessage.textContent = duplicate
+      ? ''
+      : 'Não foi possível duplicar: não há uma posição válida dentro dos limites.';
+  });
+
+  deleteObjectButton.addEventListener('click', () => {
+    const entity = sceneControls.getSelectedEntity();
+    if (!entity) return;
+    objectActionMessage.hidden = true;
+    objectActionMessage.textContent = '';
+    sceneControls.removeEntity(entity.id);
   });
 
   addObjectButtons.forEach((button) => {

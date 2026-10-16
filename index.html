@@ -78,6 +78,15 @@
               role="list"
               aria-label="Objetos presentes na cena"
             ></div>
+            <div class="object-management-actions">
+              <button class="object-action" type="button" data-duplicate-object disabled>
+                Duplicar objeto
+              </button>
+              <button class="object-action object-action--danger" type="button" data-delete-object disabled>
+                Excluir objeto
+              </button>
+            </div>
+            <p id="object-action-message" class="object-action-message" role="status" aria-live="polite" hidden></p>
           </section>
 
           <section class="object-movement-controls" aria-labelledby="movement-title">

@@ -173,7 +173,9 @@ export function createEntityRegistry(scene) {
       wireframe: SOLID_MATERIAL.wireframe,
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(spawn.x, type === 'box' ? 0.75 : 0.85, spawn.z);
+    mesh.position.set(spawn.x, spawn.y ?? (type === 'box' ? 0.75 : 0.85), spawn.z);
+    if (position?.scale) mesh.scale.copy(position.scale);
+    if (position?.rotation) mesh.rotation.copy(position.rotation);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
@@ -182,23 +184,81 @@ export function createEntityRegistry(scene) {
       name: nextEntityName(type),
       type,
       mesh,
-      color: OBJECT_COLOR,
-      materialMode: 'solid',
-      animation: {
+      color: position?.color ?? OBJECT_COLOR,
+      materialMode: position?.materialMode ?? 'solid',
+      animation: position?.animation ? { ...position.animation } : {
         enabled: false,
         axis: INITIAL_ROTATION_AXIS,
         speed: INITIAL_ROTATION_SPEED,
       },
     };
+    material.color.set(entity.color);
+    material.wireframe = entity.materialMode === 'wireframe';
 
     entities.set(id, entity);
-    validScales.set(id, new THREE.Vector3(1, 1, 1));
+    validScales.set(id, mesh.scale.clone());
     mesh.userData.entityId = id;
     scene.add(mesh);
     constrainEntity(entity);
     selectedEntityId = id;
     onSelectionChange(entity);
     return entity;
+  }
+
+  function getDuplicatePosition(entity) {
+    entity.mesh.updateWorldMatrix(true, false);
+    entityBounds.setFromObject(entity.mesh);
+    if (
+      entityBounds.isEmpty() ||
+      !Number.isFinite(entityBounds.min.x) ||
+      !Number.isFinite(entityBounds.min.y) ||
+      !Number.isFinite(entityBounds.min.z) ||
+      !Number.isFinite(entityBounds.max.x) ||
+      !Number.isFinite(entityBounds.max.y) ||
+      !Number.isFinite(entityBounds.max.z) ||
+      entityBounds.min.y < 0
+    ) {
+      return null;
+    }
+
+    const offsets = [
+      [1.5, 0],
+      [-1.5, 0],
+      [0, 1.5],
+      [0, -1.5],
+      [0, 0],
+    ];
+    for (const [offsetX, offsetZ] of offsets) {
+      if (
+        entityBounds.min.x + offsetX >= -WORKSPACE_LIMIT &&
+        entityBounds.max.x + offsetX <= WORKSPACE_LIMIT &&
+        entityBounds.min.z + offsetZ >= -WORKSPACE_LIMIT &&
+        entityBounds.max.z + offsetZ <= WORKSPACE_LIMIT
+      ) {
+        return {
+          x: entity.mesh.position.x + offsetX,
+          y: entity.mesh.position.y,
+          z: entity.mesh.position.z + offsetZ,
+        };
+      }
+    }
+    return null;
+  }
+
+  function duplicateEntity(id) {
+    const source = getEntity(id);
+    if (!source) return null;
+    const position = getDuplicatePosition(source);
+    if (!position) return null;
+
+    return createEntity(source.type, {
+      ...position,
+      scale: source.mesh.scale.clone(),
+      rotation: source.mesh.rotation.clone(),
+      color: source.color,
+      materialMode: source.materialMode,
+      animation: { ...source.animation },
+    });
   }
 
   function getEntity(id) {
@@ -276,6 +336,7 @@ export function createEntityRegistry(scene) {
 
   return {
     createEntity,
+    duplicateEntity,
     setSelectionChangeHandler,
     getEntity,
     getEntities,
@@ -339,6 +400,7 @@ export function createScene(container) {
   entityRegistry.setSelectionChangeHandler((entity) => {
     if (!entity) {
       transformControls.detach();
+      transformHelper.visible = false;
       selectionHelper.visible = false;
       return;
     }
@@ -464,6 +526,13 @@ export function createScene(container) {
     controls.enabled = gizmoPointerActive ? false : orbitWasEnabled;
   }
 
+  function removeEntity(id) {
+    if (transformControls.object?.userData.entityId === id) {
+      transformControls.detach();
+    }
+    return entityRegistry.removeEntity(id);
+  }
+
   function selectObject(type) {
     entityRegistry.replaceGeometry(entityRegistry.getSelectedEntityOrThrow(), type);
   }
@@ -585,6 +654,7 @@ export function createScene(container) {
   renderer.setAnimationLoop(render);
   return {
     ...entityRegistry,
+    removeEntity,
     setTransformMode,
     selectObject,
     setColor,
