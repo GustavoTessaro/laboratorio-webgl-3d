@@ -1,5 +1,7 @@
 using Laboratorio.Collaboration.Hubs;
+using Laboratorio.Collaboration.Data;
 using Laboratorio.Collaboration.Services;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 var frontendOrigins = builder.Configuration
@@ -18,7 +20,36 @@ builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 256 * 1024;
 });
-builder.Services.AddSingleton<RoomStateStore>(_ => new RoomStateStore());
+builder.Services.AddSingleton<RoomStateStore>();
+var persistenceProvider = builder.Configuration["Persistence:Provider"] ?? "Sqlite";
+var roomConnectionString = builder.Configuration.GetConnectionString("RoomDatabase");
+switch (persistenceProvider.ToLowerInvariant())
+{
+    case "sqlite":
+        Directory.CreateDirectory(Path.Combine(builder.Environment.ContentRootPath, "App_Data"));
+        roomConnectionString ??= $"Data Source={Path.Combine(
+            builder.Environment.ContentRootPath,
+            "App_Data",
+            "laboratorio-collaboration.db")}";
+        builder.Services.AddDbContextFactory<RoomDbContext>(options => options.UseSqlite(roomConnectionString));
+        break;
+    case "sqlserver":
+        if (string.IsNullOrWhiteSpace(roomConnectionString))
+        {
+            throw new InvalidOperationException(
+                "Configure ConnectionStrings:RoomDatabase por ambiente para usar SQL Server.");
+        }
+
+        builder.Services.AddDbContextFactory<RoomDbContext>(options => options.UseSqlServer(roomConnectionString));
+        break;
+    default:
+        throw new InvalidOperationException(
+            $"Provedor de persistência desconhecido: {persistenceProvider}.");
+}
+
+builder.Services.AddSingleton<RoomPersistenceService>();
+builder.Services.AddHostedService(serviceProvider =>
+    serviceProvider.GetRequiredService<RoomPersistenceService>());
 builder.Services.AddHostedService<LockLeaseCleanupService>();
 
 var app = builder.Build();

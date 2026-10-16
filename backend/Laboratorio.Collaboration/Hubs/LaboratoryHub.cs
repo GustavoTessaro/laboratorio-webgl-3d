@@ -4,14 +4,14 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Laboratorio.Collaboration.Hubs;
 
-public sealed class LaboratoryHub(RoomStateStore store) : Hub
+public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService persistence) : Hub
 {
     public async Task<RoomSnapshotDto> JoinRoom(
         string displayName,
         int protocolVersion,
         IReadOnlyCollection<EntityDto>? initialEntities)
     {
-        var snapshot = store.Join(
+        var snapshot = await persistence.JoinAsync(
             Context.ConnectionId,
             displayName,
             protocolVersion,
@@ -50,14 +50,39 @@ public sealed class LaboratoryHub(RoomStateStore store) : Hub
 
     public async Task<EntityDto> CreateEntity(EntityDto entity)
     {
-        var stored = store.CreateEntity(Context.ConnectionId, entity);
+        EntityDto stored;
+        try
+        {
+            stored = await persistence.CreateEntityAsync(Context.ConnectionId, entity);
+        }
+        catch (RoomPersistenceException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
         await Clients.Group(CollaborationProtocol.RoomId).SendAsync("EntityUpserted", stored);
         return stored;
     }
 
     public async Task<EntityDto> UpdateEntity(EntityDto entity, bool final)
     {
-        var stored = store.UpdateEntity(Context.ConnectionId, entity);
+        EntityDto stored;
+        try
+        {
+            stored = await persistence.UpdateEntityAsync(Context.ConnectionId, entity, final);
+        }
+        catch (RoomPersistenceException exception)
+        {
+            var authoritative = store.GetEntity(entity.Id);
+            if (authoritative is not null)
+            {
+                await Clients.Group(CollaborationProtocol.RoomId)
+                    .SendAsync("EntityUpserted", authoritative);
+            }
+
+            throw new HubException(exception.Message);
+        }
+
         await Clients.OthersInGroup(CollaborationProtocol.RoomId).SendAsync("EntityUpserted", stored);
         if (final)
         {
@@ -69,7 +94,24 @@ public sealed class LaboratoryHub(RoomStateStore store) : Hub
 
     public async Task DeleteEntity(string entityId)
     {
-        if (!store.DeleteEntity(Context.ConnectionId, entityId))
+        bool deleted;
+        try
+        {
+            deleted = await persistence.DeleteEntityAsync(Context.ConnectionId, entityId);
+        }
+        catch (RoomPersistenceException exception)
+        {
+            var authoritative = store.GetEntity(entityId);
+            if (authoritative is not null)
+            {
+                await Clients.Group(CollaborationProtocol.RoomId)
+                    .SendAsync("EntityUpserted", authoritative);
+            }
+
+            throw new HubException(exception.Message);
+        }
+
+        if (!deleted)
         {
             throw new HubException("O objeto não existe mais na sala.");
         }

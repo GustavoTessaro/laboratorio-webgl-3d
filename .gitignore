@@ -5,6 +5,7 @@ coverage/
 **/bin/
 **/obj/
 TestResults/
+backend/Laboratorio.Collaboration/App_Data/
 
 # Logs
 *.log

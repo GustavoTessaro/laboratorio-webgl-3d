@@ -27,6 +27,68 @@ public sealed class RoomStateStore
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
+    public bool IsInitialized
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _initialized;
+            }
+        }
+    }
+
+    public void InitializeFromPersistence(IEnumerable<EntityDto> entities, bool initialized)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+        lock (_sync)
+        {
+            var restoredEntities = entities.Select(CanonicalizeEntity).ToArray();
+            if (restoredEntities.Length > MaximumEntities ||
+                restoredEntities.Select(entity => entity.Id).Distinct(StringComparer.Ordinal).Count() !=
+                restoredEntities.Length)
+            {
+                throw new InvalidOperationException("O cenário persistido contém entidades inválidas.");
+            }
+
+            _entities.Clear();
+            foreach (var entity in restoredEntities)
+            {
+                _entities.Add(entity.Id, entity);
+            }
+
+            _initialized = initialized;
+        }
+    }
+
+    public EntityDto? GetEntity(string entityId)
+    {
+        lock (_sync)
+        {
+            return _entities.GetValueOrDefault(entityId);
+        }
+    }
+
+    public void RestoreEntity(string entityId, EntityDto? entity)
+    {
+        lock (_sync)
+        {
+            if (entity is null)
+            {
+                _entities.Remove(entityId);
+                return;
+            }
+
+            var canonicalEntity = CanonicalizeEntity(entity);
+            if (canonicalEntity.Id != entityId)
+            {
+                throw new InvalidOperationException("O ID restaurado não corresponde ao objeto.");
+            }
+
+            _entities[entityId] = canonicalEntity;
+        }
+    }
+
     public static string ValidateDisplayName(string? name)
     {
         var normalized = name?.Trim();
@@ -210,12 +272,16 @@ public sealed class RoomStateStore
         }
     }
 
-    public bool DeleteEntity(string connectionId, string entityId)
+    public bool DeleteEntity(string connectionId, string entityId, bool releaseLock = true)
     {
         lock (_sync)
         {
             RequireLockOwner(connectionId, entityId);
-            _locks.Remove(entityId);
+            if (releaseLock)
+            {
+                _locks.Remove(entityId);
+            }
+
             return _entities.Remove(entityId);
         }
     }
