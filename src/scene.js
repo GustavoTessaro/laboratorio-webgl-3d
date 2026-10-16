@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 
 const MAX_PIXEL_RATIO = 2;
 const OBJECT_COLOR = '#6c8cff';
@@ -198,6 +199,13 @@ export function createScene(container) {
   controls.maxDistance = 12;
   controls.target.set(0, 0.5, 0);
 
+  const transformControls = new TransformControls(camera, renderer.domElement);
+  transformControls.setMode('translate');
+  transformControls.setSpace('world');
+  const transformHelper = transformControls.getHelper();
+  transformHelper.visible = false;
+  scene.add(transformHelper);
+
   const entityRegistry = createEntityRegistry(scene);
   entityRegistry.createEntity('box', { x: 0, z: 0 });
   const selectionHelper = new THREE.BoxHelper(
@@ -211,13 +219,32 @@ export function createScene(container) {
   selectionHelper.renderOrder = 1;
   selectionHelper.frustumCulled = false;
   scene.add(selectionHelper);
+  let moveModeEnabled = false;
+  let orbitWasEnabled = controls.enabled;
+  let gizmoPointerActive = false;
   entityRegistry.setSelectionChangeHandler((entity) => {
     if (!entity) {
+      transformControls.detach();
       selectionHelper.visible = false;
       return;
     }
+    transformControls.attach(entity.mesh);
     selectionHelper.setFromObject(entity.mesh);
     selectionHelper.visible = true;
+  });
+
+  transformControls.addEventListener('dragging-changed', (event) => {
+    if (event.value) {
+      orbitWasEnabled = controls.enabled;
+      controls.enabled = false;
+      gizmoPointerActive = true;
+    } else {
+      controls.enabled = orbitWasEnabled;
+    }
+  });
+  transformControls.addEventListener('mouseDown', () => {
+    gizmoPointerActive = true;
+    pointerStart = null;
   });
 
   const raycaster = new THREE.Raycaster();
@@ -253,9 +280,13 @@ export function createScene(container) {
   function handlePointerUp(event) {
     const start = pointerStart;
     const isClickCandidate =
-      start?.pointerId === event.pointerId && !start.moved && activePointers.size === 1;
+      start?.pointerId === event.pointerId &&
+      !start.moved &&
+      activePointers.size === 1 &&
+      !gizmoPointerActive;
     activePointers.delete(event.pointerId);
     if (start?.pointerId === event.pointerId) pointerStart = null;
+    gizmoPointerActive = false;
     if (!isClickCandidate) return;
 
     const movedX = event.clientX - start.x;
@@ -280,12 +311,20 @@ export function createScene(container) {
   function handlePointerCancel(event) {
     activePointers.delete(event.pointerId);
     if (pointerStart?.pointerId === event.pointerId) pointerStart = null;
+    gizmoPointerActive = false;
   }
 
   renderer.domElement.addEventListener('pointerdown', handlePointerDown);
   renderer.domElement.addEventListener('pointermove', handlePointerMove);
   renderer.domElement.addEventListener('pointerup', handlePointerUp);
   renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
+
+  function setMoveMode(enabled) {
+    moveModeEnabled = Boolean(enabled);
+    transformControls.enabled = moveModeEnabled;
+    transformHelper.visible = moveModeEnabled && Boolean(entityRegistry.getSelectedEntity());
+    controls.enabled = moveModeEnabled && gizmoPointerActive ? false : orbitWasEnabled;
+  }
 
   function selectObject(type) {
     entityRegistry.replaceGeometry(entityRegistry.getSelectedEntityOrThrow(), type);
@@ -397,7 +436,10 @@ export function createScene(container) {
     const delta = Math.min(clock.getDelta(), MAX_FRAME_DELTA);
     entityRegistry.updateAnimations(delta);
     const selectedEntity = entityRegistry.getSelectedEntity();
-    if (selectedEntity) selectionHelper.setFromObject(selectedEntity.mesh);
+    if (selectedEntity) {
+      selectionHelper.setFromObject(selectedEntity.mesh);
+      transformHelper.updateMatrixWorld(true);
+    }
     controls.update();
     renderer.render(scene, camera);
   }
@@ -405,6 +447,7 @@ export function createScene(container) {
   renderer.setAnimationLoop(render);
   return {
     ...entityRegistry,
+    setMoveMode,
     selectObject,
     setColor,
     setWireframe,
