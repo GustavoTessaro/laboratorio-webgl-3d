@@ -39,6 +39,14 @@ a {
   flex-direction: column;
 }
 
+@media (min-width: 641px) {
+  .app-shell {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
 .topbar {
   display: flex;
   min-height: 70px;
@@ -246,14 +254,17 @@ a {
   width: min(1440px, 100%);
   flex: 1;
   grid-template-columns: minmax(0, 1fr) 310px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 26px;
   margin: 0 auto;
-  padding: 42px 5.2% 48px;
+  padding: 20px 5.2%;
+  min-height: 0;
 }
 
 .scene-panel {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
 }
 
@@ -262,7 +273,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .eyebrow {
@@ -313,7 +324,7 @@ h1 {
 .scene-frame {
   position: relative;
   display: flex;
-  min-height: 390px;
+  min-height: 0;
   flex: 1;
   overflow: hidden;
   flex-direction: column;
@@ -324,7 +335,7 @@ h1 {
 
 .scene-container {
   position: relative;
-  min-height: 340px;
+  min-height: 0;
   flex: 1;
   overflow: hidden;
 }
@@ -397,6 +408,9 @@ h1 {
 
 .controls-panel {
   align-self: stretch;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 23px 20px 18px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -1028,7 +1042,7 @@ h1 {
   .workspace {
     grid-template-columns: minmax(0, 1fr) 260px;
     gap: 18px;
-    padding: 32px 4%;
+    padding: 20px 4%;
   }
 
   .controls-panel {
@@ -1037,6 +1051,11 @@ h1 {
 }
 
 @media (max-width: 640px) {
+  .app-shell {
+    height: auto;
+    overflow: visible;
+  }
+
   .topbar {
     min-height: 62px;
     padding: 0 20px;
@@ -1055,6 +1074,7 @@ h1 {
 
   .workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
     gap: 18px;
     padding: 27px 18px 30px;
   }
@@ -1072,6 +1092,8 @@ h1 {
   }
 
   .controls-panel {
+    min-height: auto;
+    overflow-y: visible;
     padding: 18px;
   }
 
