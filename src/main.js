@@ -40,6 +40,7 @@ const collaborationStatus = document.querySelector('#collaboration-status');
 const collaborationOpenButton = document.querySelector('#collaboration-open');
 const collaborationDialog = document.querySelector('#collaboration-dialog');
 const collaborationForm = document.querySelector('#collaboration-form');
+const collaborationSubmitButton = collaborationForm.querySelector('[type="submit"]');
 const collaborationNameInput = document.querySelector('#collaboration-name');
 const collaborationMessage = document.querySelector('#collaboration-message');
 const participantList = document.querySelector('#participant-list');
@@ -59,20 +60,28 @@ try {
   let collaborationConnected = false;
   let operationQueue = Promise.resolve();
   let displayName = '';
+  let connectionAttemptInProgress = false;
+  let connectionAttemptId = 0;
 
   function setCollaborationStatus(state, text) {
     collaborationStatus.dataset.state = state;
     collaborationStatus.textContent = text;
     collaborationConnected = state === 'connected';
-    collaborationOpenButton.textContent = state === 'connected'
-      ? 'Conectado'
-      : state === 'disconnected'
-        ? 'Entrar na sala'
-        : 'Conectando…';
-    collaborationOpenButton.disabled = state === 'connected' ||
-      state === 'connecting' ||
-      state === 'reconnecting';
-    if (state === 'disconnected') {
+    const buttonText = {
+      connected: 'Conectado',
+      connecting: 'Conectando à sala...',
+      reconnecting: 'Reconectando à sala...',
+      error: 'Tentar novamente',
+      disconnected: 'Conectar',
+    }[state] ?? 'Conectar';
+    const loading = state === 'connecting' || state === 'reconnecting';
+    collaborationOpenButton.textContent = buttonText;
+    collaborationSubmitButton.textContent = buttonText;
+    collaborationOpenButton.dataset.loading = String(loading);
+    collaborationSubmitButton.dataset.loading = String(loading);
+    collaborationOpenButton.disabled = state === 'connected' || loading;
+    collaborationSubmitButton.disabled = state === 'connected' || loading;
+    if (state === 'disconnected' || state === 'reconnecting' || state === 'error') {
       participants.clear();
       editLocks.clear();
       deniedEdits.clear();
@@ -478,12 +487,21 @@ try {
   });
 
   useLocalButton.addEventListener('click', () => {
+    connectionAttemptId += 1;
+    connectionAttemptInProgress = false;
     collaborationDialog.close();
     setCollaborationStatus('disconnected', 'Colaboração desconectada · modo local');
+    if (collaborationClient) {
+      void collaborationClient.stop().catch((error) => {
+        showCollaborationMessage(`Não foi possível encerrar a conexão: ${error.message}`);
+      });
+    }
   });
 
   collaborationForm.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (connectionAttemptInProgress) return;
+
     displayName = collaborationNameInput.value.trim();
     if (!displayName) {
       showCollaborationMessage('Informe um nome de exibição.');
@@ -491,21 +509,35 @@ try {
       return;
     }
 
-    collaborationOpenButton.disabled = true;
+    connectionAttemptInProgress = true;
+    const attemptId = ++connectionAttemptId;
+    setCollaborationStatus('connecting', 'Conectando à sala...');
     showCollaborationMessage('');
     try {
       const client = createCollaborationClient();
       await client.connect(displayName, sceneControls.getSharedEntities());
+      if (attemptId !== connectionAttemptId) return;
       collaborationDialog.close();
-      collaborationOpenButton.textContent = 'Conectado';
-      collaborationOpenButton.disabled = true;
     } catch (error) {
-      console.error('Não foi possível conectar à sala de colaboração.', error);
-      showCollaborationMessage(
-        `Não foi possível conectar. Suas alterações permanecem neste navegador. (${error.message})`,
+      if (attemptId !== connectionAttemptId) return;
+      console.warn('Não foi possível conectar à sala de colaboração.', error);
+      setCollaborationStatus(
+        'error',
+        'Não foi possível conectar agora. Verifique a conexão e tente novamente.',
       );
-      collaborationOpenButton.disabled = false;
-      collaborationOpenButton.textContent = 'Tentar novamente';
+      showCollaborationMessage(
+        'A colaboração está indisponível no momento. Suas alterações permanecem neste navegador.',
+      );
+    } finally {
+      if (attemptId === connectionAttemptId) {
+        connectionAttemptInProgress = false;
+        if (collaborationClient?.connected) {
+          setCollaborationStatus(
+            'connected',
+            `Conectado à sala ${collaborationClient.lastSnapshot?.roomId ?? ''}`.trim(),
+          );
+        }
+      }
     }
   });
 

@@ -30,6 +30,11 @@ export class CollaborationClient {
     this.joined = false;
     this.displayName = '';
     this.initialEntities = [];
+    this.connectPromise = null;
+    this.joinPromise = null;
+    this.lastSnapshot = null;
+    this.connectionGeneration = 0;
+    this.stopPromise = null;
     this.heldLocks = new Set();
     this.pendingLocks = new Map();
     this.renewalTimer = null;
@@ -51,12 +56,18 @@ export class CollaborationClient {
       this.handlers.onStatus?.('reconnecting', 'Reconectando à sala…');
     });
     this.connection.onreconnected(async () => {
-      this.handlers.onStatus?.('connecting', 'Reconectado; sincronizando a sala…');
+      if (this.connection.state !== HubConnectionState.Connected) return;
+      const generation = this.connectionGeneration;
+      this.handlers.onStatus?.('reconnecting', 'Reconectando à sala...');
       try {
-        await this.joinRoom();
+        await this.joinRoom(generation);
       } catch (error) {
-        this.handlers.onStatus?.('disconnected', 'Reconexão incompleta · alterações locais preservadas');
-        this.handlers.onTransportError?.(error);
+        if (generation === this.connectionGeneration) {
+          this.handlers.onStatus?.(
+            'error',
+            'Não foi possível sincronizar a reconexão. Tente conectar novamente.',
+          );
+        }
       }
     });
     this.connection.onclose(() => {
@@ -72,31 +83,92 @@ export class CollaborationClient {
   }
 
   async connect(displayName, initialEntities) {
+    if (this.stopPromise) {
+      const pendingConnect = this.connectPromise;
+      await this.stopPromise;
+      if (pendingConnect) {
+        try {
+          await pendingConnect;
+        } catch (error) {
+          if (error.name !== 'AbortError') throw error;
+        }
+      }
+    }
+    if (this.connectPromise) return this.connectPromise;
+    if (this.connected && this.lastSnapshot) return this.lastSnapshot;
+
     this.displayName = displayName;
     this.initialEntities = initialEntities;
-    this.handlers.onStatus?.('connecting', 'Conectando à sala…');
+    const generation = ++this.connectionGeneration;
+    const attempt = this.connectAndJoin(generation);
+    this.connectPromise = attempt;
     try {
-      if (this.connection.state === HubConnectionState.Disconnected) {
-        await this.connection.start();
-      }
-      return await this.joinRoom();
+      return await attempt;
     } catch (error) {
-      this.handlers.onStatus?.('disconnected', 'Colaboração indisponível · alterações locais preservadas');
+      this.joined = false;
+      if (generation !== this.connectionGeneration) {
+        const cancellation = new Error('A tentativa de conexão foi cancelada.');
+        cancellation.name = 'AbortError';
+        throw cancellation;
+      }
+      this.handlers.onStatus?.(
+        'error',
+        'Não foi possível conectar agora. Verifique a conexão e tente novamente.',
+      );
       throw error;
+    } finally {
+      if (this.connectPromise === attempt) this.connectPromise = null;
     }
   }
 
-  async joinRoom() {
-    const snapshot = await this.connection.invoke(
+  async joinRoom(generation = this.connectionGeneration) {
+    if (generation !== this.connectionGeneration) {
+      throw new Error('A tentativa de conexão foi cancelada.');
+    }
+    if (this.connection.state !== HubConnectionState.Connected) {
+      throw new Error('A conexão SignalR ainda não está pronta para entrar na sala.');
+    }
+    if (this.joinPromise) return this.joinPromise;
+    if (this.joined && this.lastSnapshot) return this.lastSnapshot;
+
+    const attempt = this.connection.invoke(
       'JoinRoom',
       this.displayName,
       COLLABORATION_PROTOCOL_VERSION,
       this.initialEntities,
-    );
-    this.joined = true;
-    this.handlers.onStatus?.('connected', `Conectado à sala ${snapshot.roomId}`);
-    this.handlers.onSnapshot?.(snapshot);
-    return snapshot;
+    ).then((snapshot) => {
+      if (generation !== this.connectionGeneration) {
+        throw new Error('A tentativa de conexão foi cancelada.');
+      }
+      this.joined = true;
+      this.lastSnapshot = snapshot;
+      this.handlers.onStatus?.('connected', `Conectado à sala ${snapshot.roomId}`);
+      this.handlers.onSnapshot?.(snapshot);
+      return snapshot;
+    }).catch((error) => {
+      if (generation === this.connectionGeneration) this.joined = false;
+      throw error;
+    });
+    this.joinPromise = attempt;
+    try {
+      return await attempt;
+    } finally {
+      if (this.joinPromise === attempt) this.joinPromise = null;
+    }
+  }
+
+  async connectAndJoin(generation) {
+    this.handlers.onStatus?.('connecting', 'Conectando à sala...');
+    if (this.connection.state === HubConnectionState.Disconnected) {
+      await this.connection.start();
+    }
+    if (generation !== this.connectionGeneration) {
+      throw new Error('A tentativa de conexão foi cancelada.');
+    }
+    if (this.connection.state !== HubConnectionState.Connected) {
+      throw new Error('A conexão SignalR não chegou ao estado conectado.');
+    }
+    return this.joinRoom(generation);
   }
 
   async acquireEditLock(entityId) {
@@ -138,8 +210,21 @@ export class CollaborationClient {
   }
 
   async stop() {
+    if (this.stopPromise) return this.stopPromise;
+    this.connectionGeneration += 1;
+    this.joined = false;
     this.stopRenewal();
     this.heldLocks.clear();
+    const attempt = this.stopConnection();
+    this.stopPromise = attempt;
+    try {
+      await attempt;
+    } finally {
+      if (this.stopPromise === attempt) this.stopPromise = null;
+    }
+  }
+
+  async stopConnection() {
     if (this.connection.state !== HubConnectionState.Disconnected) {
       await this.connection.stop();
     }

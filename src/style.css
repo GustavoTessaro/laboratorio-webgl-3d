@@ -110,6 +110,10 @@ a {
   color: #f1c75b;
 }
 
+.collaboration-status[data-state='error'] {
+  color: #ffb6a9;
+}
+
 .collaboration-open,
 .collaboration-submit {
   min-height: 34px;
@@ -121,6 +125,39 @@ a {
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
+}
+
+.collaboration-open[data-loading='true'],
+.collaboration-submit[data-loading='true'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: wait;
+}
+
+.collaboration-open[data-loading='true']::before,
+.collaboration-submit[data-loading='true']::before {
+  width: 11px;
+  height: 11px;
+  border: 2px solid #dce4ff66;
+  border-top-color: #dce4ff;
+  border-radius: 50%;
+  animation: collaboration-spinner 700ms linear infinite;
+  content: '';
+}
+
+@keyframes collaboration-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collaboration-open[data-loading='true']::before,
+  .collaboration-submit[data-loading='true']::before {
+    animation-duration: 1800ms;
+  }
 }
 
 .collaboration-dialog {
