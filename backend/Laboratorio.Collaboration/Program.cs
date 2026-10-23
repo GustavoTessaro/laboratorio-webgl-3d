@@ -59,7 +59,12 @@ switch (persistenceProvider.ToLowerInvariant())
                 "Configure ConnectionStrings:RoomDatabase por ambiente para usar SQL Server.");
         }
 
-        builder.Services.AddDbContextFactory<RoomDbContext>(options => options.UseSqlServer(roomConnectionString));
+        builder.Services.AddDbContextFactory<RoomDbContext>(options => options.UseSqlServer(
+            roomConnectionString,
+            sqlServer => sqlServer.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorNumbersToAdd: null)));
         break;
     default:
         throw new InvalidOperationException(
@@ -71,7 +76,8 @@ builder.Services.AddSingleton(serviceProvider => new RoomPersistenceService(
     serviceProvider.GetRequiredService<RoomStateStore>(),
     serviceProvider.GetRequiredService<ILogger<RoomPersistenceService>>(),
     builder.Configuration.GetValue<bool?>("Persistence:ApplyMigrationsOnStartup")
-        ?? builder.Environment.IsDevelopment()));
+        ?? builder.Environment.IsDevelopment(),
+    hubContext: serviceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<LaboratoryHub>>()));
 builder.Services.AddHostedService(serviceProvider =>
     serviceProvider.GetRequiredService<RoomPersistenceService>());
 builder.Services.AddHostedService<LockLeaseCleanupService>();

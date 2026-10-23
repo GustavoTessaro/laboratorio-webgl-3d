@@ -11,11 +11,20 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         int protocolVersion,
         IReadOnlyCollection<EntityDto>? initialEntities)
     {
-        var snapshot = await persistence.JoinAsync(
-            Context.ConnectionId,
-            displayName,
-            protocolVersion,
-            initialEntities ?? Array.Empty<EntityDto>());
+        RoomSnapshotDto snapshot;
+        try
+        {
+            snapshot = await persistence.JoinAsync(
+                Context.ConnectionId,
+                displayName,
+                protocolVersion,
+                initialEntities ?? Array.Empty<EntityDto>());
+        }
+        catch (RoomPersistenceException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+
         await Groups.AddToGroupAsync(Context.ConnectionId, CollaborationProtocol.RoomId);
         await Clients.OthersInGroup(CollaborationProtocol.RoomId)
             .SendAsync("ParticipantJoined", snapshot.Participants.Single(p => p.Id == Context.ConnectionId));
@@ -73,7 +82,9 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         }
         catch (RoomPersistenceException exception)
         {
-            var authoritative = store.GetEntity(entity.Id);
+            var authoritative = exception.RequiresReconciliation
+                ? null
+                : store.GetEntity(entity.Id);
             if (authoritative is not null)
             {
                 await Clients.Group(CollaborationProtocol.RoomId)
@@ -101,7 +112,7 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         }
         catch (RoomPersistenceException exception)
         {
-            var authoritative = store.GetEntity(entityId);
+            var authoritative = exception.RequiresReconciliation ? null : store.GetEntity(entityId);
             if (authoritative is not null)
             {
                 await Clients.Group(CollaborationProtocol.RoomId)
