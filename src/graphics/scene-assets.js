@@ -12,29 +12,6 @@ export const WORKSPACE_SIZE = WORKSPACE_LIMIT * 2;
 export const WORKSPACE_HEIGHT = 10;
 export const BOUNDS_EPSILON = 1e-6;
 
-export const geometries = {
-  box: {
-    name: 'Cubo',
-    halfSize: new THREE.Vector3(0.75, 0.75, 0.75),
-    create: () => new THREE.BoxGeometry(1.5, 1.5, 1.5),
-  },
-  sphere: {
-    name: 'Esfera',
-    halfSize: new THREE.Vector3(0.85, 0.85, 0.85),
-    create: () => new THREE.SphereGeometry(0.85, 32, 24),
-  },
-  pyramid: {
-    name: 'Pirâmide',
-    halfSize: new THREE.Vector3(0.85, 0.85, 0.85),
-    create: () => new THREE.ConeGeometry(0.85, 1.7, 4),
-  },
-  torus: {
-    name: 'Toroide',
-    halfSize: new THREE.Vector3(0.85, 0.85, 0.23),
-    create: () => new THREE.TorusGeometry(0.62, 0.23, 16, 48),
-  },
-};
-
 export function createObjectMaterial() {
   return new THREE.MeshStandardMaterial({
     ...SOLID_MATERIAL,

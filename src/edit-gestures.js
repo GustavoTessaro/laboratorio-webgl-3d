@@ -9,8 +9,9 @@ export function bindLocalInput(input, { getEntity, preview, restore, commit, sig
     if (!edit) return;
     const { entity, value } = edit;
     edit = null;
-    restore(entity);
-    if (!cancelled && getEntity() === entity) commit(value, entity);
+    const willCommit = !cancelled && getEntity() === entity;
+    restore(entity, willCommit);
+    if (willCommit) commit(value, entity);
   }
 
   input.addEventListener('input', () => {

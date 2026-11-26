@@ -1,9 +1,10 @@
 import { bindLocalInput } from './edit-gestures.js';
+import { bindGeometryControls } from './geometry-controls.js';
 
 export function createControlsPanel(root, sceneControls, { getLock, isLocked, onDelete }) {
   const lifetime = new AbortController();
   const { signal } = lifetime;
-  const addObjectButtons = root.querySelectorAll('[data-add-object]');
+  const geometryControls = bindGeometryControls(root, sceneControls, signal);
   const sceneObjectList = root.querySelector('#scene-object-list');
   const duplicateObjectButton = root.querySelector('[data-duplicate-object]');
   const deleteObjectButton = root.querySelector('[data-delete-object]');
@@ -11,7 +12,6 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   const applyPropertiesButton = root.querySelector('[data-apply-properties]');
   const objectActionMessage = root.querySelector('#object-action-message');
   const transformModeButtons = root.querySelectorAll('[data-transform-mode]');
-  const objectButtons = root.querySelectorAll('[data-object-shape]');
   const colorButtons = root.querySelectorAll('[data-object-color]');
   const materialButtons = root.querySelectorAll('[data-material-mode]');
   const customColorInput = root.querySelector('#custom-object-color');
@@ -62,8 +62,8 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
       if (input.entity && (input.entity !== entity || lockedByAnotherParticipant)) input.cancel();
     }
     sceneControls.setSelectedEntityEditable(!lockedByAnotherParticipant);
+    geometryControls.sync(entity, lockedByAnotherParticipant);
     const selectionDependentControls = [
-      ...objectButtons,
       ...colorButtons,
       customColorInput,
       ...materialButtons,
@@ -87,7 +87,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     });
     updateObjectListSelection();
     if (!entity) {
-      [...objectButtons, ...colorButtons, ...materialButtons, ...rotationAxisButtons].forEach((button) => {
+      [...colorButtons, ...materialButtons, ...rotationAxisButtons].forEach((button) => {
         button.setAttribute('aria-pressed', 'false');
       });
       customColorInput.value = '#6c8cff';
@@ -99,9 +99,6 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
       return;
     }
 
-    objectButtons.forEach((button) => {
-      button.setAttribute('aria-pressed', String(button.dataset.objectShape === entity.type));
-    });
     if (!colorGesture.entity) updateColorSelection(entity.color);
     materialButtons.forEach((button) => {
       button.setAttribute('aria-pressed', String(
@@ -204,18 +201,6 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     sceneControls.applyCopiedProperties(entity.id);
   }, { signal });
 
-  addObjectButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      sceneControls.createEntity(button.dataset.addObject);
-    }, { signal });
-  });
-
-  objectButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      sceneControls.selectObject(button.dataset.objectShape);
-    }, { signal });
-  });
-
   colorButtons.forEach((button) => {
     button.addEventListener('click', () => {
       const { objectColor } = button.dataset;
@@ -313,6 +298,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   const localInputs = [colorGesture, speedGesture];
 
   function cancelLocalInputs(entityId) {
+    geometryControls.cancel(entityId);
     for (const input of localInputs) {
       if (entityId === undefined || input.entity?.id === entityId) input.cancel();
     }
@@ -324,6 +310,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     cancelLocalInputs,
     dispose() {
       lifetime.abort();
+      geometryControls.dispose();
       cancelLocalInputs();
     },
   };

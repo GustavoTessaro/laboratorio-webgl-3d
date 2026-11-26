@@ -1,6 +1,7 @@
 import './style.css';
 import { createScene } from './scene.js';
-import { CollaborationClient } from './collaboration.js';
+import { CollaborationClient, COLLABORATION_PROTOCOL_VERSION } from './collaboration.js';
+import { sameGeometryParameters } from './graphics/geometries.js';
 import { createTransformPreviews } from './edit-gestures.js';
 import { createControlsPanel } from './controls-panel.js';
 
@@ -19,6 +20,7 @@ const useLocalButton = document.querySelector('[data-collaboration-local]');
 function sameEntityState(first, second) {
   if (!first || !second) return first === second;
   return ['id', 'name', 'type', 'color', 'materialMode'].every((key) => first[key] === second[key]) &&
+    sameGeometryParameters(first.geometryParameters, second.geometryParameters) &&
     ['position', 'rotation', 'scale'].every((key) =>
       ['x', 'y', 'z'].every((axis) => first[key][axis] === second[key][axis]),
     ) &&
@@ -277,7 +279,7 @@ try {
   }
 
   function applyRoomSnapshot(snapshot) {
-    if (snapshot.protocolVersion !== 1) {
+    if (snapshot.protocolVersion !== COLLABORATION_PROTOCOL_VERSION) {
       throw new Error('A sala usa uma versão de protocolo incompatível.');
     }
     cancelLocalInputs();

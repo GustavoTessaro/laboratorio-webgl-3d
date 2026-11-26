@@ -101,6 +101,11 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     }
     const entity = registry.getEntity(controls.object?.userData.entityId);
     if (!entity) return;
+    if (entity.geometryPreview) {
+      registry.cancelGeometryPreview(entity);
+      controls.pointerUp(null);
+      return;
+    }
     edit = { entity, mode: controls.mode, initialPose: registry.serializeEntity(entity.id, entity.mesh) };
     entity.editingTransform = true;
     onStart?.(entity.id);

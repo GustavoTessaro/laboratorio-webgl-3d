@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Laboratorio.Collaboration.Contracts;
 using Laboratorio.Collaboration.Data;
 using Laboratorio.Collaboration.Hubs;
@@ -624,6 +625,9 @@ public sealed class RoomPersistenceService(
         record.Id = entity.Id;
         record.Name = entity.Name;
         record.Type = entity.Type;
+        record.GeometryParametersJson = entity.GeometryParameters is null
+            ? null
+            : JsonSerializer.Serialize(entity.GeometryParameters);
         record.Color = entity.Color;
         record.MaterialMode = entity.MaterialMode;
         record.PositionX = entity.Position.X;
@@ -651,7 +655,10 @@ public sealed class RoomPersistenceService(
         new Vector3Dto(record.RotationX, record.RotationY, record.RotationZ),
         new Vector3Dto(record.ScaleX, record.ScaleY, record.ScaleZ),
         new AnimationDto(record.AnimationEnabled, record.AnimationAxis, record.AnimationSpeed),
-        record.LastEditor);
+        record.LastEditor,
+        record.GeometryParametersJson is null
+            ? null
+            : JsonSerializer.Deserialize<GeometryParametersDto>(record.GeometryParametersJson));
 
     private void ReplacePersistedEntities(IEnumerable<EntityDto> entities)
     {

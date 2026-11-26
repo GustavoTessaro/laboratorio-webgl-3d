@@ -90,10 +90,8 @@
           <section class="scene-objects-controls" aria-labelledby="scene-objects-title">
             <h3 id="scene-objects-title" class="control-section-title">Objetos da cena</h3>
             <div class="add-object-options" role="group" aria-label="Adicionar objeto à cena">
-              <button class="add-object-option" type="button" data-add-object="box">+ Cubo</button>
-              <button class="add-object-option" type="button" data-add-object="sphere">+ Esfera</button>
-              <button class="add-object-option" type="button" data-add-object="pyramid">+ Pirâmide</button>
-              <button class="add-object-option" type="button" data-add-object="torus">+ Toroide</button>
+              <select id="add-object-shape" class="geometry-select" aria-label="Forma do novo objeto"></select>
+              <button class="add-object-option" type="button" data-add-object>Adicionar</button>
             </div>
             <div
               id="scene-object-list"
@@ -153,22 +151,14 @@
             </button>
           </details>
 
-          <details class="control-category object-controls">
+          <details class="control-category object-controls" data-geometry-panel>
             <summary id="objects-title" class="control-section-title">Geometria do objeto</summary>
-            <div class="object-selector" role="group" aria-label="Escolha uma forma geométrica">
-              <button class="object-option" type="button" data-object-shape="box" aria-pressed="true">
-                Cubo
-              </button>
-              <button class="object-option" type="button" data-object-shape="sphere" aria-pressed="false">
-                Esfera
-              </button>
-              <button class="object-option" type="button" data-object-shape="pyramid" aria-pressed="false">
-                Pirâmide
-              </button>
-              <button class="object-option" type="button" data-object-shape="torus" aria-pressed="false">
-                Toroide
-              </button>
-            </div>
+            <label class="geometry-field" for="object-shape">Forma</label>
+            <select id="object-shape" class="geometry-select" disabled></select>
+            <p class="geometry-description">Os parâmetros definem a malha. Para mudar a escala do objeto, use Posicionamento.</p>
+            <div data-geometry-fields></div>
+            <button class="reset-appearance" type="button" data-reset-geometry disabled>Restaurar parâmetros</button>
+            <p class="object-action-message" data-geometry-message role="status" hidden></p>
           </details>
 
           <details class="control-category appearance-controls">

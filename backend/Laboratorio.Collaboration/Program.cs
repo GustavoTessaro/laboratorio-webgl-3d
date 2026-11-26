@@ -87,7 +87,7 @@ app.UseCors("Frontend");
 app.MapGet("/", () => Results.Ok(new
 {
     service = "Laboratório WebGL 3D Collaboration",
-    protocolVersion = 1,
+    protocolVersion = Laboratorio.Collaboration.Contracts.CollaborationProtocol.Version,
     room = "laboratorio-principal",
 }));
 app.MapHub<LaboratoryHub>("/hubs/laboratory");

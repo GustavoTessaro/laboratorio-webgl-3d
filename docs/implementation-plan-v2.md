@@ -38,6 +38,7 @@
 - [x] V2-01 documentada com PRD, TDD e plano incremental.
 - [ ] V2-02 verificada com gizmo, bloqueio, cancelamento, reconexão e contagem de gravações.
 - [x] V2-03 implementada e validada nas suítes automatizadas e no Chrome headless em modo local.
+- [x] V2-04 implementada e validada com WebGL, SignalR local e migração SQLite.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
 - [ ] Pelo menos um recurso avançado demonstrável em V2-08 ou V2-10.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
@@ -71,3 +72,24 @@ O encerramento da cena para o loop e o observer, remove listeners e descarta con
 - [x] Build Vite concluído com os avisos de anotações do SignalR e de tamanho do bundle. Build .NET concluído com zero avisos e 20 testes aprovados.
 - [x] Chrome headless com WebGL em modo local. Verificou abertura das categorias, criação e seleção de objetos, ativação de animação, rolagem independente e dimensões da cena em 1280 × 840 e 390 × 750. Eventos de saída simulados verificaram a preservação ou desmontagem do canvas conforme o sinal de cache do navegador.
 - [ ] Validar em dois navegadores reais o painel com bloqueios, troca de seleção, prévias do gizmo e reconexão. Conferir teclado e toque em dispositivos reais. As pendências de alta latência e Azure SQL da V2-02 permanecem abertas.
+
+## Registro da V2-04
+
+O [catálogo de geometrias](../backend/Laboratorio.Collaboration/Contracts/GeometryCatalog.json) é consumido pelo Vite e embutido no projeto .NET. As treze formas têm parâmetros próprios. As quatro formas da V1 mantêm os valores originais e a pirâmide conserva quatro lados. Os limites de subdivisão por eixo garantem até 8.192 vértices e 8.192 triângulos por forma nas fábricas do Three.js r180. O frontend também verifica a contagem produzida. Cliente e servidor usam a caixa conservadora de cada forma, com a mesma ordem Euler e tolerância espacial da V2-02.
+
+Os controles mostram os campos da forma selecionada e permitem restaurar os padrões. Cada gesto ajusta uma prévia local e confirma uma vez se o valor mudar. A confirmação reaproveita a geometria da prévia quando possível. A mudança preserva rotação, escala, aparência e configuração da animação. A posição é preservada quando a nova caixa já cabe na cena. O objeto é deslocado o mínimo necessário quando cruza uma borda e a mudança é rejeitada se a caixa exceder o espaço disponível com a escala e rotação atuais. A duplicação copia os parâmetros confirmados e a troca de forma adota os padrões da nova forma.
+
+O contrato envia `geometryParameters` apenas com os valores diferentes do padrão. A migração aditiva `20261126233514_AddGeometryParameters` acrescenta `GeometryParametersJson`, anulável, como `TEXT` em SQLite e `nvarchar(1024)` em SQL Server. Registros existentes continuam válidos sem preenchimento retroativo. A igualdade por conteúdo evita gravações repetidas e integra parâmetros à reconciliação. O teste de navegador também encontrou e cobriu uma falha anterior no envio da cena inicial. O índice passado por `Array.from` era interpretado como transformação no serializador.
+
+### Publicação e recuperação
+
+O protocolo passa para a versão 2 porque clientes antigos não conseguem renderizar as novas formas. Versões diferentes podem rodar em modo local durante a transição. O hub rejeita o ingresso com protocolo diferente e preserva os dados já salvos. Para a janela de publicação, gerar e revisar o script idempotente com `dotnet ef migrations script 20261016104024_InitialRoomPersistence 20261126233514_AddGeometryParameters --idempotent --project backend/Laboratorio.Collaboration` usando o provider SQL Server. Confirmar o histórico da migração inicial e o backup, aplicar primeiro a coluna aditiva no ambiente de teste, validar a leitura de uma sala antiga, publicar o backend atualizado e em seguida o frontend. Solicitar recarga dos clientes antigos e verificar a entrada de dois participantes. Após o primeiro uso de parâmetros ou formas novas, um retorno ao binário V1 exige um plano de recuperação dos dados. O `Down` remove a coluna e perde os valores nela gravados.
+
+### Resultados e pendências
+
+- [x] Suíte JavaScript com 18 testes, incluindo fábricas e orçamentos das treze formas, parâmetros inválidos, limites rotacionados, compatibilidade V1, prévia, descarte, duplicação e hidratação.
+- [x] Build Vite concluído com os avisos de anotações do SignalR e de tamanho do bundle. Build .NET concluído com zero avisos e 35 testes aprovados.
+- [x] Migração SQLite aplicada a um registro com schema V1. Verificadas a persistência após reinício, uma gravação para a mudança confirmada e zero para a prévia e para uma confirmação equivalente.
+- [x] Script idempotente SQL Server gerado e revisado sem conexão com o banco. O script acrescenta a coluna anulável e registra a migração no histórico.
+- [x] Chrome headless com WebGL em modo local e sessões colaborativas em localhost. Verificados seleção e criação das treze formas, campos do nó toroidal, prévia visível só no autor, confirmação compartilhada, duplicação, restauração dos padrões e hidratação em nova sessão.
+- [ ] Ensaiar publicação coordenada e retorno em ambiente de teste com SQL Server e conferir interação por toque e teclado em dispositivos reais. As pendências anteriores de alta latência continuam abertas.

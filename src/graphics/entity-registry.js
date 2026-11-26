@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import {
   BOUNDS_EPSILON, SOLID_MATERIAL, WORKSPACE_HEIGHT, WORKSPACE_LIMIT, WORKSPACE_SIZE,
-  createObjectMaterial, geometries,
+  createObjectMaterial,
 } from './scene-assets.js';
+import { createGeometry, describeGeometry, geometries, sameGeometryParameters } from './geometries.js';
 
 const INITIAL_ROTATION_SPEED = 45;
 const INITIAL_ROTATION_AXIS = 'y';
@@ -26,6 +27,8 @@ export function createEntityRegistry(scene) {
   const previousScale = new THREE.Vector3();
   const candidateScale = new THREE.Vector3();
   const interpolatedScale = new THREE.Vector3();
+  const baseMatrix = new THREE.Matrix4();
+  const baseQuaternion = new THREE.Quaternion();
   const validTransforms = new Map();
   let selectedEntityId = null;
   let nextSpawnIndex = 0;
@@ -40,6 +43,7 @@ export function createEntityRegistry(scene) {
       id: entity.id,
       name: entity.name,
       type: entity.type,
+      geometryParameters: entity.geometrySpec.overrides ? { ...entity.geometrySpec.overrides } : null,
       color: entity.color,
       materialMode: entity.materialMode,
       position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
@@ -50,14 +54,11 @@ export function createEntityRegistry(scene) {
     };
   }
 
-  function measureBounds(entity) {
-    const { mesh } = entity;
-    mesh.updateWorldMatrix(true, false);
+  function measureBounds(halfSize, matrix) {
     // The server validates the transformed box built from these same half sizes.
-    const { halfSize } = geometries[entity.type];
     entityBounds.min.copy(halfSize).negate();
     entityBounds.max.copy(halfSize);
-    entityBounds.applyMatrix4(mesh.matrixWorld);
+    entityBounds.applyMatrix4(matrix);
   }
 
   function restoreBase(entity) {
@@ -68,9 +69,27 @@ export function createEntityRegistry(scene) {
     entity.mesh.scale.copy(base.scale);
   }
 
-  function constrainEntity(entity, remember = true) {
+  function constrainEntity(entity, remember = true, halfSize = entity.geometrySpec.halfSize) {
     const { mesh } = entity;
-    measureBounds(entity);
+    mesh.updateWorldMatrix(true, false);
+    measureBounds(halfSize, mesh.matrixWorld);
+    if (!getPositionCorrection()) {
+      restoreBase(entity);
+      return false;
+    }
+    mesh.position.add(positionCorrection);
+    if (remember) {
+      validTransforms.set(entity.id, {
+        position: mesh.position.clone(),
+        rotation: mesh.rotation.clone(),
+        scale: mesh.scale.clone(),
+      });
+      entity.rotationPhase = 0;
+    }
+    return true;
+  }
+
+  function getPositionCorrection() {
     if (entityBounds.isEmpty()) return;
 
     if (
@@ -90,7 +109,6 @@ export function createEntityRegistry(scene) {
       entitySize.y > WORKSPACE_HEIGHT + BOUNDS_EPSILON ||
       entitySize.z > WORKSPACE_SIZE + BOUNDS_EPSILON
     ) {
-      restoreBase(entity);
       return false;
     }
 
@@ -114,33 +132,12 @@ export function createEntityRegistry(scene) {
       positionCorrection.z = WORKSPACE_LIMIT - entityBounds.max.z;
     }
 
-    if (positionCorrection.lengthSq() > 0) {
-      mesh.position.add(positionCorrection);
-      measureBounds(entity);
-    }
-    if (
-      entityBounds.min.x < -WORKSPACE_LIMIT - BOUNDS_EPSILON ||
-      entityBounds.max.x > WORKSPACE_LIMIT + BOUNDS_EPSILON ||
-      entityBounds.min.y < -BOUNDS_EPSILON ||
-      entityBounds.max.y > WORKSPACE_HEIGHT + BOUNDS_EPSILON ||
-      entityBounds.min.z < -WORKSPACE_LIMIT - BOUNDS_EPSILON ||
-      entityBounds.max.z > WORKSPACE_LIMIT + BOUNDS_EPSILON
-    ) {
-      return false;
-    }
-    if (remember) {
-      validTransforms.set(entity.id, {
-        position: mesh.position.clone(),
-        rotation: mesh.rotation.clone(),
-        scale: mesh.scale.clone(),
-      });
-      entity.rotationPhase = 0;
-    }
     return true;
   }
 
   function scaleFitsWorkspace(entity) {
-    measureBounds(entity);
+    entity.mesh.updateWorldMatrix(true, false);
+    measureBounds(entity.geometrySpec.halfSize, entity.mesh.matrixWorld);
     if (entityBounds.isEmpty()) return false;
     entityBounds.getSize(entitySize);
     return (
@@ -215,19 +212,16 @@ export function createEntityRegistry(scene) {
   }
 
   function createEntity(type = 'box', position = null) {
-    const geometryFactory = geometries[type]?.create;
-    if (!geometryFactory) {
-      throw new Error(`Forma geométrica desconhecida: ${type}`);
-    }
+    const geometrySpec = describeGeometry(type, position?.geometryParameters);
 
     const spawn = position ?? spawnCoordinates[nextSpawnIndex % spawnCoordinates.length];
     if (!position) nextSpawnIndex += 1;
     const id = position?.id ?? crypto.randomUUID();
     if (entities.has(id)) throw new Error(`Já existe um objeto com o identificador ${id}.`);
-    const geometry = geometryFactory();
+    const geometry = createGeometry(geometrySpec);
     const material = createObjectMaterial();
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(spawn.x, spawn.y ?? (type === 'box' ? 0.75 : 0.85), spawn.z);
+    mesh.position.set(spawn.x, spawn.y ?? geometrySpec.halfSize.y, spawn.z);
     const requestedScale = position?.scale?.clone() ?? mesh.scale.clone();
     if (position?.rotation) mesh.rotation.copy(position.rotation);
     mesh.scale.copy(minimumScale);
@@ -238,6 +232,7 @@ export function createEntityRegistry(scene) {
       id,
       name: position?.name ?? nextEntityName(type),
       type,
+      geometrySpec,
       mesh,
       color: position?.color ?? SOLID_MATERIAL.color,
       materialMode: position?.materialMode ?? 'solid',
@@ -266,13 +261,8 @@ export function createEntityRegistry(scene) {
 
   function getDuplicatePosition(entity) {
     const base = validTransforms.get(entity.id);
-    const matrix = new THREE.Matrix4().compose(
-      base.position, new THREE.Quaternion().setFromEuler(base.rotation), base.scale,
-    );
-    const { halfSize } = geometries[entity.type];
-    entityBounds.min.copy(halfSize).negate();
-    entityBounds.max.copy(halfSize);
-    entityBounds.applyMatrix4(matrix);
+    baseMatrix.compose(base.position, baseQuaternion.setFromEuler(base.rotation), base.scale);
+    measureBounds(entity.geometrySpec.halfSize, baseMatrix);
     if (
       entityBounds.isEmpty() ||
       !Number.isFinite(entityBounds.min.x) ||
@@ -321,6 +311,7 @@ export function createEntityRegistry(scene) {
       ...position,
       scale: base.scale,
       rotation: base.rotation,
+      geometryParameters: source.geometrySpec.overrides,
       color: source.color,
       materialMode: source.materialMode,
       animation: { ...source.animation },
@@ -406,6 +397,7 @@ export function createEntityRegistry(scene) {
     const entity = entities.get(id);
     if (!entity) return false;
 
+    cancelGeometryPreview(entity);
     releaseMesh(entity);
     entities.delete(id);
     validTransforms.delete(id);
@@ -418,22 +410,72 @@ export function createEntityRegistry(scene) {
     return true;
   }
 
-  function replaceGeometry(entity, type) {
-    const geometryFactory = geometries[type]?.create;
-    if (!geometryFactory) {
-      throw new Error(`Forma geométrica desconhecida: ${type}`);
-    }
-    if (type === entity.type) return;
-
-    restoreBase(entity);
-    const geometry = geometryFactory();
+  function cancelGeometryPreview(entity) {
+    const preview = entity.geometryPreview;
+    if (!preview) return;
     entity.mesh.geometry.dispose();
-    entity.mesh.geometry = geometry;
-    entity.name = nextEntityName(type);
+    entity.mesh.geometry = preview.original;
+    entity.geometryPreview = null;
+    applyVisualPose(entity);
+  }
+
+  function setGeometry(entity, type, parameters, previewOnly = false) {
+    if (entity.editingTransform) throw new Error('Conclua a transformação antes de editar a geometria.');
+    const spec = describeGeometry(type, parameters);
+    const committed = entity.geometrySpec;
+    if (committed.type === type && sameGeometryParameters(committed.overrides, spec.overrides)) {
+      cancelGeometryPreview(entity);
+      return false;
+    }
+
+    const base = validTransforms.get(entity.id);
+    baseMatrix.compose(base.position, baseQuaternion.setFromEuler(base.rotation), base.scale);
+    measureBounds(spec.halfSize, baseMatrix);
+    if (!getPositionCorrection()) {
+      throw new Error('A geometria não cabe na cena com a escala e a rotação atuais.');
+    }
+
+    const preview = entity.geometryPreview;
+    const matchesPreview = preview?.spec.type === type &&
+      sameGeometryParameters(preview.spec.overrides, spec.overrides);
+    if (!matchesPreview) {
+      const geometry = createGeometry(spec);
+      const original = preview?.original ?? entity.mesh.geometry;
+      if (preview) entity.mesh.geometry.dispose();
+      entity.mesh.geometry = geometry;
+      entity.geometryPreview = { original, spec };
+    }
+    if (previewOnly) {
+      applyVisualPose(entity);
+      return true;
+    }
+    entity.geometryPreview.original.dispose();
+    entity.geometryPreview = null;
+    if (entity.type !== type) entity.name = nextEntityName(type);
     entity.type = type;
-    constrainEntityScale(entity);
+    entity.geometrySpec = spec;
+    base.position.add(positionCorrection);
+    applyVisualPose(entity);
     if (entity.id === selectedEntityId) onSelectionChange(entity);
     onEntityChanged(serializeEntity(entity));
+    return true;
+  }
+
+  function replaceGeometry(entity, type) {
+    if (type !== entity.type) return setGeometry(entity, type, null);
+    return false;
+  }
+
+  function applyVisualPose(entity) {
+    const halfSize = (entity.geometryPreview?.spec ?? entity.geometrySpec).halfSize;
+    restoreBase(entity);
+    if (entity.animation.enabled) {
+      entity.mesh.rotation[entity.animation.axis] += entity.rotationPhase;
+    }
+    if (!constrainEntity(entity, false, halfSize) && entity.geometryPreview) {
+      // The authored pose fits even if the current animated angle does not.
+      constrainEntity(entity, false, halfSize);
+    }
   }
 
   function updateAnimations(delta) {
@@ -442,9 +484,7 @@ export function createEntityRegistry(scene) {
       const speed = entity.previewRotationSpeed ?? entity.animation.speed;
       entity.rotationPhase = (entity.rotationPhase + THREE.MathUtils.degToRad(speed) * delta)
         % (2 * Math.PI);
-      restoreBase(entity);
-      entity.mesh.rotation[entity.animation.axis] += entity.rotationPhase;
-      constrainEntity(entity, false);
+      applyVisualPose(entity);
     }
   }
 
@@ -478,7 +518,10 @@ export function createEntityRegistry(scene) {
   }
 
   function clearEntities() {
-    for (const entity of entities.values()) releaseMesh(entity);
+    for (const entity of entities.values()) {
+      cancelGeometryPreview(entity);
+      releaseMesh(entity);
+    }
     entities.clear();
     validTransforms.clear();
     selectedEntityId = null;
@@ -498,6 +541,7 @@ export function createEntityRegistry(scene) {
         color: snapshot.color,
         materialMode: snapshot.materialMode,
         animation: snapshot.animation,
+        geometryParameters: snapshot.geometryParameters,
       });
       const entity = getEntity(snapshot.id);
       entity.lastEditor = snapshot.lastEditor ?? null;
@@ -520,20 +564,28 @@ export function createEntityRegistry(scene) {
         color: snapshot.color,
         materialMode: snapshot.materialMode,
         animation: snapshot.animation,
+        geometryParameters: snapshot.geometryParameters,
+        lastEditor: snapshot.lastEditor,
       });
       entity = getEntity(snapshot.id);
     } else {
       const base = validTransforms.get(entity.id);
+      cancelGeometryPreview(entity);
       const typeChanged = entity.type !== snapshot.type;
+      const spec = describeGeometry(snapshot.type, snapshot.geometryParameters);
+      const geometryChanged = typeChanged ||
+        !sameGeometryParameters(entity.geometrySpec.overrides, spec.overrides);
       const transformChanged = ['position', 'rotation', 'scale'].some((key) =>
         ['x', 'y', 'z'].some((axis) => base[key][axis] !== snapshot[key][axis]),
       );
-      const restart = typeChanged || transformChanged ||
+      const restart = transformChanged ||
         entity.animation.enabled !== snapshot.animation.enabled ||
         entity.animation.axis !== snapshot.animation.axis;
-      if (typeChanged) {
+      if (geometryChanged) {
+        const geometry = createGeometry(spec);
         entity.mesh.geometry.dispose();
-        entity.mesh.geometry = geometries[snapshot.type].create();
+        entity.mesh.geometry = geometry;
+        entity.geometrySpec = spec;
       }
       entity.type = snapshot.type;
       entity.name = snapshot.name;
@@ -552,6 +604,8 @@ export function createEntityRegistry(scene) {
         entity.mesh.rotation.set(snapshot.rotation.x, snapshot.rotation.y, snapshot.rotation.z);
         entity.mesh.scale.set(snapshot.scale.x, snapshot.scale.y, snapshot.scale.z);
         constrainEntity(entity);
+      } else if (geometryChanged) {
+        applyVisualPose(entity);
       }
     }
     return entity;
@@ -573,7 +627,7 @@ export function createEntityRegistry(scene) {
   }
 
   function getSharedEntities() {
-    return Array.from(entities.values(), serializeEntity);
+    return Array.from(entities.values(), (entity) => serializeEntity(entity));
   }
 
   return {
@@ -590,6 +644,8 @@ export function createEntityRegistry(scene) {
     selectEntity,
     removeEntity,
     replaceGeometry,
+    setGeometry,
+    cancelGeometryPreview,
     constrainEntity,
     constrainEntityScale,
     restoreBase,

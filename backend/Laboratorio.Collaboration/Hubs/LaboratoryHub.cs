@@ -11,6 +11,9 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         int protocolVersion,
         IReadOnlyCollection<EntityDto>? initialEntities)
     {
+        if (protocolVersion != CollaborationProtocol.Version)
+            throw new HubException("Versão de colaboração incompatível. Atualize a página para entrar na sala.");
+
         RoomSnapshotDto snapshot;
         try
         {

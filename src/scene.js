@@ -324,7 +324,7 @@ export function createScene(container, {
   }
 
   function selectObject(type) {
-    entityRegistry.replaceGeometry(entityRegistry.getSelectedEntityOrThrow(), type);
+    return entityRegistry.replaceGeometry(entityRegistry.getSelectedEntityOrThrow(), type);
   }
 
   function setColor(color, entity = entityRegistry.getSelectedEntityOrThrow()) {

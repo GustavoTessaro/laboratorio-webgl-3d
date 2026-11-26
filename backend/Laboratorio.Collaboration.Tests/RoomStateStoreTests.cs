@@ -22,8 +22,8 @@ public sealed class RoomStateStoreTests
         var store = new RoomStateStore();
         var initial = CreateBox();
 
-        var first = store.Join("connection-1", "Ana", 1, [initial]);
-        var second = store.Join("connection-2", "Bia", 1, []);
+        var first = store.Join("connection-1", "Ana", CollaborationProtocol.Version, [initial]);
+        var second = store.Join("connection-2", "Bia", CollaborationProtocol.Version, []);
 
         Assert.Single(first.Entities);
         Assert.Single(second.Entities);
@@ -36,7 +36,7 @@ public sealed class RoomStateStoreTests
     {
         var store = new RoomStateStore();
         var entity = CreateBox();
-        store.Join("connection-1", "Ana", 1, [entity]);
+        store.Join("connection-1", "Ana", CollaborationProtocol.Version, [entity]);
         store.AcquireLock("connection-1", entity.Id);
         store.UpdateEntity("connection-1", entity with
         {
@@ -44,7 +44,7 @@ public sealed class RoomStateStoreTests
             Color = "#ff0000"
         });
 
-        var snapshot = store.Join("connection-2", "Bia", 1, []);
+        var snapshot = store.Join("connection-2", "Bia", CollaborationProtocol.Version, []);
 
         var synchronizedEntity = Assert.Single(snapshot.Entities);
         Assert.Equal(new Vector3Dto(3, 1, -2), synchronizedEntity.Position);
@@ -57,8 +57,8 @@ public sealed class RoomStateStoreTests
     {
         var store = new RoomStateStore();
         var entity = CreateBox();
-        store.Join("connection-1", "Ana", 1, [entity]);
-        store.Join("connection-2", "Bia", 1, []);
+        store.Join("connection-1", "Ana", CollaborationProtocol.Version, [entity]);
+        store.Join("connection-2", "Bia", CollaborationProtocol.Version, []);
 
         Assert.True(store.AcquireLock("connection-1", entity.Id).Granted);
         Assert.False(store.AcquireLock("connection-2", entity.Id).Granted);
@@ -74,8 +74,8 @@ public sealed class RoomStateStoreTests
     {
         var store = new RoomStateStore();
         var entity = CreateBox();
-        store.Join("connection-1", "Ana", 1, [entity]);
-        store.Join("connection-2", "Bia", 1, []);
+        store.Join("connection-1", "Ana", CollaborationProtocol.Version, [entity]);
+        store.Join("connection-2", "Bia", CollaborationProtocol.Version, []);
         store.AcquireLock("connection-1", entity.Id);
 
         store.Leave("connection-1");
@@ -97,7 +97,7 @@ public sealed class RoomStateStoreTests
         Assert.Throws<InvalidOperationException>(() =>
             store.Join("connection-1", "Ana", 99, []));
         Assert.Throws<InvalidOperationException>(() =>
-            store.Join("connection-1", "Ana", 1, [CreateBox() with
+            store.Join("connection-1", "Ana", CollaborationProtocol.Version, [CreateBox() with
             {
                 Scale = new Vector3Dto(0, 1, 1)
             }]));
@@ -108,7 +108,7 @@ public sealed class RoomStateStoreTests
     {
         var store = new RoomStateStore();
         var existing = CreateBox();
-        store.Join("connection-1", "Ana", 1, [existing]);
+        store.Join("connection-1", "Ana", CollaborationProtocol.Version, [existing]);
 
         Assert.Throws<InvalidOperationException>(() => store.CreateEntity("connection-1", existing));
         Assert.Throws<InvalidOperationException>(() => store.DeleteEntity("connection-1", existing.Id));
@@ -122,12 +122,12 @@ public sealed class RoomStateStoreTests
     {
         var store = new RoomStateStore();
         var entity = CreateBox();
-        store.Join("connection-1", "Ana", 1, [entity]);
+        store.Join("connection-1", "Ana", CollaborationProtocol.Version, [entity]);
         store.AcquireLock("connection-1", entity.Id);
         store.DeleteEntity("connection-1", entity.Id);
         store.Leave("connection-1");
 
-        var nextParticipant = store.Join("connection-2", "Bia", 1, [CreateBox()]);
+        var nextParticipant = store.Join("connection-2", "Bia", CollaborationProtocol.Version, [CreateBox()]);
 
         Assert.Empty(nextParticipant.Entities);
     }
@@ -138,8 +138,8 @@ public sealed class RoomStateStoreTests
         var clock = new TestTimeProvider();
         var store = new RoomStateStore(clock);
         var entity = CreateBox();
-        store.Join("connection-1", "Ana", 1, [entity]);
-        store.Join("connection-2", "Bia", 1, []);
+        store.Join("connection-1", "Ana", CollaborationProtocol.Version, [entity]);
+        store.Join("connection-2", "Bia", CollaborationProtocol.Version, []);
         store.AcquireLock("connection-1", entity.Id);
 
         clock.Advance(TimeSpan.FromSeconds(21));
@@ -148,6 +148,56 @@ public sealed class RoomStateStoreTests
         Assert.Single(expired);
         Assert.Null(store.GetLock(entity.Id));
         Assert.True(store.AcquireLock("connection-2", entity.Id).Granted);
+    }
+
+    [Theory]
+    [InlineData("box")]
+    [InlineData("sphere")]
+    [InlineData("pyramid")]
+    [InlineData("torus")]
+    [InlineData("cylinder")]
+    [InlineData("cone")]
+    [InlineData("plane")]
+    [InlineData("capsule")]
+    [InlineData("tetrahedron")]
+    [InlineData("octahedron")]
+    [InlineData("dodecahedron")]
+    [InlineData("icosahedron")]
+    [InlineData("torusKnot")]
+    public void AcceptsEveryGeometryWithDefaultParameters(string type)
+    {
+        var entity = CreateBox() with { Type = type, Position = new Vector3Dto(0, 5, 0) };
+        var store = new RoomStateStore();
+        var snapshot = store.Join("ana", "Ana", CollaborationProtocol.Version, [entity]);
+        Assert.Equal(entity, Assert.Single(snapshot.Entities));
+    }
+
+    [Fact]
+    public void RejectsInvalidParametersAndUsesTheParameterizedRotatedBounds()
+    {
+        var box = CreateBox() with
+        {
+            Position = new Vector3Dto(8, 3, 0),
+            Scale = new Vector3Dto(1.5, 1, 1),
+            Rotation = new Vector3Dto(0, 0, Math.PI / 2),
+            GeometryParameters = new GeometryParametersDto { ["width"] = 4, ["height"] = 4 }
+        };
+        RoomStateStore.ValidateEntity(box);
+        foreach (var parameters in new[]
+        {
+            new GeometryParametersDto { ["width"] = 8 },
+            new GeometryParametersDto { ["widthSegments"] = 24.5 },
+            new GeometryParametersDto { ["heightSegments"] = 25 },
+            new GeometryParametersDto { ["radius"] = 3 },
+            new GeometryParametersDto { ["width"] = double.NaN }
+        })
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                RoomStateStore.ValidateEntity(box with { GeometryParameters = parameters }));
+        }
+
+        var store = new RoomStateStore();
+        Assert.Throws<InvalidOperationException>(() => store.Join("legacy", "Cliente V1", 1, []));
     }
 
     private sealed class TestTimeProvider : TimeProvider

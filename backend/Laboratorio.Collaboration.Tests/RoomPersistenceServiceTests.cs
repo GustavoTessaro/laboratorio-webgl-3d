@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Laboratorio.Collaboration.Tests;
@@ -21,7 +22,7 @@ public sealed class RoomPersistenceServiceTests
         await StartAndWaitAsync(service);
 
         var original = CreateBox();
-        await service.JoinAsync("connection-1", "Ana", 1, [original]);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, [original]);
         Assert.True(store.AcquireLock("connection-1", original.Id).Granted);
         var final = original with
         {
@@ -38,7 +39,7 @@ public sealed class RoomPersistenceServiceTests
         var restoredStore = new RoomStateStore();
         var restoredService = CreateService(factory, restoredStore);
         await StartAndWaitAsync(restoredService);
-        var snapshot = await restoredService.JoinAsync("connection-2", "Bia", 1, [original]);
+        var snapshot = await restoredService.JoinAsync("connection-2", "Bia", CollaborationProtocol.Version, [original]);
 
         Assert.Equal(saved, Assert.Single(snapshot.Entities));
         Assert.Equal("Ana", snapshot.Entities.Single().LastEditor);
@@ -55,7 +56,7 @@ public sealed class RoomPersistenceServiceTests
         var firstStore = new RoomStateStore();
         var firstService = CreateService(factory, firstStore);
         await StartAndWaitAsync(firstService);
-        await firstService.JoinAsync("connection-1", "Ana", 1, []);
+        await firstService.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, []);
 
         var created = await firstService.CreateEntityAsync("connection-1", CreateBox());
         Assert.True(firstStore.AcquireLock("connection-1", created.Id).Granted);
@@ -65,7 +66,7 @@ public sealed class RoomPersistenceServiceTests
         var restartedStore = new RoomStateStore();
         var restartedService = CreateService(factory, restartedStore);
         await StartAndWaitAsync(restartedService);
-        var reloaded = await restartedService.JoinAsync("connection-2", "Bia", 1, []);
+        var reloaded = await restartedService.JoinAsync("connection-2", "Bia", CollaborationProtocol.Version, []);
         Assert.Equal(created, Assert.Single(reloaded.Entities));
 
         Assert.True(restartedStore.AcquireLock("connection-2", created.Id).Granted);
@@ -84,7 +85,7 @@ public sealed class RoomPersistenceServiceTests
         var afterDelete = await afterDeleteService.JoinAsync(
             "connection-3",
             "Caio",
-            1,
+            CollaborationProtocol.Version,
             [CreateBox()]);
 
         Assert.Empty(afterDelete.Entities);
@@ -98,14 +99,14 @@ public sealed class RoomPersistenceServiceTests
         var store = new RoomStateStore();
         var service = CreateService(CreateFactory(connection, interceptor), store);
         await StartAndWaitAsync(service);
-        await service.JoinAsync("ana", "Ana", 1, []);
+        await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
         var created = await service.CreateEntityAsync("ana", CreateBox());
         var writes = interceptor.CommitCount;
         Assert.True(store.AcquireLock("ana", created.Id).Granted);
 
         var gesture = created with { Position = new Vector3Dto(3, 2, 1) };
         Assert.Equal(gesture, await service.UpdateEntityAsync("ana", gesture, false));
-        Assert.Equal(created, Assert.Single((await service.JoinAsync("bia", "Bia", 1, [])).Entities));
+        Assert.Equal(created, Assert.Single((await service.JoinAsync("bia", "Bia", CollaborationProtocol.Version, [])).Entities));
         Assert.Equal(writes, interceptor.CommitCount);
 
         var discarded = new List<string>();
@@ -129,6 +130,67 @@ public sealed class RoomPersistenceServiceTests
     }
 
     [Fact]
+    public async Task GeometryMigrationPreservesLegacyRowsAndPersistsOnlyConfirmedParameterChanges()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var factory = CreateFactory(connection, interceptor);
+        var legacy = CreateBox();
+        await using (var database = await factory.CreateDbContextAsync())
+        {
+            await database.GetService<IMigrator>().MigrateAsync("20261016104024_InitialRoomPersistence");
+            await database.Database.ExecuteSqlInterpolatedAsync(
+                $"""INSERT INTO Rooms (RoomId, UpdatedAtUtc) VALUES ({CollaborationProtocol.RoomId}, {DateTime.UtcNow})""");
+            await database.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO RoomEntities (
+                    RoomId, Id, Name, Type, Color, MaterialMode,
+                    PositionX, PositionY, PositionZ, RotationX, RotationY, RotationZ, ScaleX, ScaleY, ScaleZ,
+                    AnimationEnabled, AnimationAxis, AnimationSpeed)
+                VALUES (
+                    {CollaborationProtocol.RoomId}, {legacy.Id}, {legacy.Name}, {legacy.Type}, {legacy.Color}, {legacy.MaterialMode},
+                    {legacy.Position.X}, {legacy.Position.Y}, {legacy.Position.Z},
+                    {legacy.Rotation.X}, {legacy.Rotation.Y}, {legacy.Rotation.Z},
+                    {legacy.Scale.X}, {legacy.Scale.Y}, {legacy.Scale.Z},
+                    {legacy.Animation.Enabled}, {legacy.Animation.Axis}, {legacy.Animation.Speed})
+                """);
+        }
+
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        Assert.Equal(legacy, Assert.Single(original.Entities));
+        var writes = interceptor.CommitCount;
+        Assert.True(store.AcquireLock("ana", legacy.Id).Granted);
+
+        var knot = legacy with
+        {
+            Type = "torusKnot",
+            Position = new Vector3Dto(0, 4, 0),
+            GeometryParameters = new GeometryParametersDto { ["p"] = 5, ["radius"] = 0.9, ["q"] = 3 }
+        };
+        var preview = await service.UpdateEntityAsync("ana", knot, false);
+        Assert.Equal(knot.Type, preview.Type);
+        Assert.Equal(legacy, Assert.Single(store.GetSnapshot().Entities));
+        Assert.Equal(writes, interceptor.CommitCount);
+
+        var final = await service.UpdateEntityAsync("ana", knot, true);
+        Assert.Equal(new GeometryParametersDto { ["p"] = 5, ["radius"] = 0.9 }, final.GeometryParameters);
+        Assert.Equal(writes + 1, interceptor.CommitCount);
+        var equivalent = knot with
+        {
+            GeometryParameters = new GeometryParametersDto { ["radius"] = 0.9, ["p"] = 5 }
+        };
+        Assert.Equal(final, await service.UpdateEntityAsync("ana", equivalent, true));
+        Assert.Equal(writes + 1, interceptor.CommitCount);
+
+        var restarted = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restarted);
+        var reloaded = await restarted.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
+        Assert.Equal(final, Assert.Single(reloaded.Entities));
+    }
+
+    [Fact]
     public async Task FailedFinalWriteRollsBackMemoryAndReportsFailure()
     {
         await using var connection = await OpenDatabaseAsync();
@@ -137,7 +199,7 @@ public sealed class RoomPersistenceServiceTests
         var service = CreateService(factory, store);
         await StartAndWaitAsync(service);
         var original = CreateBox();
-        await service.JoinAsync("connection-1", "Ana", 1, [original]);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, [original]);
         Assert.True(store.AcquireLock("connection-1", original.Id).Granted);
 
         await using (var context = factory.CreateDbContext())
@@ -164,7 +226,7 @@ public sealed class RoomPersistenceServiceTests
         var restartedStore = new RoomStateStore();
         var restartedService = CreateService(factory, restartedStore);
         await StartAndWaitAsync(restartedService);
-        var restored = await restartedService.JoinAsync("connection-2", "Bia", 1, []);
+        var restored = await restartedService.JoinAsync("connection-2", "Bia", CollaborationProtocol.Version, []);
         Assert.Equal(original, Assert.Single(restored.Entities));
     }
 
@@ -176,7 +238,7 @@ public sealed class RoomPersistenceServiceTests
         var store = new RoomStateStore();
         var service = CreateService(factory, store);
         await StartAndWaitAsync(service);
-        await service.JoinAsync("connection-1", "Ana", 1, []);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, []);
 
         await using (var context = factory.CreateDbContext())
         {
@@ -198,7 +260,7 @@ public sealed class RoomPersistenceServiceTests
         var restoredStore = new RoomStateStore();
         var restoredService = CreateService(factory, restoredStore);
         await StartAndWaitAsync(restoredService);
-        var snapshot = await restoredService.JoinAsync("connection-2", "Bia", 1, [entity]);
+        var snapshot = await restoredService.JoinAsync("connection-2", "Bia", CollaborationProtocol.Version, [entity]);
         Assert.Empty(snapshot.Entities);
     }
 
@@ -211,7 +273,7 @@ public sealed class RoomPersistenceServiceTests
         var service = CreateService(factory, store);
         await StartAndWaitAsync(service);
         var entity = CreateBox();
-        await service.JoinAsync("connection-1", "Ana", 1, [entity]);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, [entity]);
         Assert.True(store.AcquireLock("connection-1", entity.Id).Granted);
 
         await using (var context = factory.CreateDbContext())
@@ -234,7 +296,7 @@ public sealed class RoomPersistenceServiceTests
         var restoredStore = new RoomStateStore();
         var restoredService = CreateService(factory, restoredStore);
         await StartAndWaitAsync(restoredService);
-        var restored = await restoredService.JoinAsync("connection-2", "Bia", 1, []);
+        var restored = await restoredService.JoinAsync("connection-2", "Bia", CollaborationProtocol.Version, []);
         Assert.Equal(entity, Assert.Single(restored.Entities));
         Assert.Empty(restored.Locks);
     }
@@ -248,7 +310,7 @@ public sealed class RoomPersistenceServiceTests
         var initialService = CreateService(factory, initialStore);
         await StartAndWaitAsync(initialService);
         var persistedEntity = CreateBox();
-        await initialService.JoinAsync("connection-1", "Ana", 1, [persistedEntity]);
+        await initialService.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, [persistedEntity]);
 
         var retryingFactory = new TransientFailureDbContextFactory(factory);
         var recoveredStore = new RoomStateStore();
@@ -262,7 +324,7 @@ public sealed class RoomPersistenceServiceTests
         var snapshot = await recoveredService.JoinAsync(
             "connection-2",
             "Bia",
-            1,
+            CollaborationProtocol.Version,
             [suppliedByClient]);
 
         Assert.Equal(2, retryingFactory.CreateAttempts);
@@ -279,7 +341,7 @@ public sealed class RoomPersistenceServiceTests
         var initialEntity = CreateBox();
 
         await Assert.ThrowsAsync<RoomPersistenceException>(() =>
-            service.JoinAsync("connection-1", "Ana", 1, [initialEntity]));
+            service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, [initialEntity]));
 
         Assert.False(service.IsReady);
         Assert.False(store.IsInitialized);
@@ -295,7 +357,7 @@ public sealed class RoomPersistenceServiceTests
         var store = new RoomStateStore();
         var service = CreateService(factory, store);
         await StartAndWaitAsync(service);
-        await service.JoinAsync("connection-1", "Ana", 1, []);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, []);
 
         var entity = CreateBox();
         interceptor.ThrowAfterNextCommit();
@@ -319,7 +381,7 @@ public sealed class RoomPersistenceServiceTests
         var service = CreateService(factory, store);
         await StartAndWaitAsync(service);
         var original = CreateBox();
-        await service.JoinAsync("connection-1", "Ana", 1, [original]);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, [original]);
         Assert.True(store.AcquireLock("connection-1", original.Id).Granted);
         var updatedEntity = original with
         {
@@ -350,7 +412,7 @@ public sealed class RoomPersistenceServiceTests
         var service = CreateService(factory, store);
         await StartAndWaitAsync(service);
         var entity = CreateBox();
-        await service.JoinAsync("connection-1", "Ana", 1, [entity]);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, [entity]);
         Assert.True(store.AcquireLock("connection-1", entity.Id).Granted);
 
         interceptor.ThrowAfterNextCommit();
@@ -374,7 +436,7 @@ public sealed class RoomPersistenceServiceTests
             store,
             recoveryInterval: TimeSpan.FromMilliseconds(5));
         await StartAndWaitAsync(service);
-        await service.JoinAsync("connection-1", "Ana", 1, []);
+        await service.JoinAsync("connection-1", "Ana", CollaborationProtocol.Version, []);
         var entity = CreateBox();
         interceptor.ThrowAfterNextCommit();
 

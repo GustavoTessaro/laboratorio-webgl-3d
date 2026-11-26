@@ -37,6 +37,9 @@ namespace Laboratorio.Collaboration.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(7);
 
+                    b.Property<string>("GeometryParametersJson")
+                        .HasMaxLength(1024);
+
                     b.Property<string>("LastEditor")
                         .HasMaxLength(32);
 

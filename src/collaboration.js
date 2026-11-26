@@ -4,7 +4,7 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 
-export const COLLABORATION_PROTOCOL_VERSION = 1;
+export const COLLABORATION_PROTOCOL_VERSION = 2;
 export const COLLABORATION_ROOM_ID = 'laboratorio-principal';
 const HUB_URL = import.meta.env.VITE_COLLABORATION_URL?.trim()
   || (import.meta.env.DEV ? 'http://localhost:5080/hubs/laboratory' : null);

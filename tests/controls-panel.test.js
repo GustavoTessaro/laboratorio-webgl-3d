@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createControlsPanel } from '../src/controls-panel.js';
+import { describeGeometry } from '../src/graphics/geometries.js';
 
 class Control extends EventTarget {
   attributes = new Map();
   dataset = {};
   disabled = false;
+  children = [];
   setAttribute(name, value) { this.attributes.set(name, value); }
+  replaceChildren(...children) { this.children = children; }
+  append(...children) { this.children.push(...children); }
 }
 
 test('the panel cancels a local color preview on a foreign lock and removes listeners on dispose', () => {
@@ -20,6 +24,7 @@ test('the panel cancels a local color preview on a foreign lock and removes list
   const entity = {
     id: 'box',
     type: 'box',
+    geometrySpec: describeGeometry('box'),
     color: '#6c8cff',
     materialMode: 'solid',
     animation: { enabled: true, axis: 'y', speed: 45 },
@@ -28,7 +33,9 @@ test('the panel cancels a local color preview on a foreign lock and removes list
   const committed = [];
   let locked = false;
   let editable;
-  const panel = createControlsPanel({ querySelector, querySelectorAll: () => [] }, {
+  const panel = createControlsPanel({
+    querySelector, querySelectorAll: () => [], ownerDocument: { createElement: () => new Control() },
+  }, {
     getSelectedEntity: () => entity,
     setSelectedEntityEditable(value) { editable = value; },
     hasCopiedProperties: () => false,

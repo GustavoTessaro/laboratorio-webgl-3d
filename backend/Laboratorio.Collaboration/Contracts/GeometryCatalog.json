@@ -1,0 +1,114 @@
+{
+  "box": {
+    "name": "Cubo",
+    "parameters": {
+      "width": [1.5, 0.1, 8, 0.01],
+      "height": [1.5, 0.1, 8, 0.01],
+      "depth": [1.5, 0.1, 8, 0.01],
+      "widthSegments": [1, 1, 24, 1],
+      "heightSegments": [1, 1, 24, 1],
+      "depthSegments": [1, 1, 24, 1]
+    }
+  },
+  "sphere": {
+    "name": "Esfera",
+    "parameters": {
+      "radius": [0.85, 0.1, 4, 0.01],
+      "widthSegments": [32, 3, 64, 1],
+      "heightSegments": [24, 2, 48, 1]
+    }
+  },
+  "pyramid": {
+    "name": "Pirâmide",
+    "parameters": {
+      "radius": [0.85, 0.1, 4, 0.01],
+      "height": [1.7, 0.1, 8, 0.01]
+    }
+  },
+  "torus": {
+    "name": "Toroide",
+    "parameters": {
+      "radius": [0.62, 0.1, 4, 0.01],
+      "tube": [0.23, 0.05, 2, 0.01],
+      "radialSegments": [16, 3, 48, 1],
+      "tubularSegments": [48, 3, 64, 1]
+    }
+  },
+  "cylinder": {
+    "name": "Cilindro",
+    "parameters": {
+      "radiusTop": [0.6, 0.1, 4, 0.01],
+      "radiusBottom": [0.6, 0.1, 4, 0.01],
+      "height": [1.6, 0.1, 8, 0.01],
+      "radialSegments": [32, 3, 64, 1],
+      "heightSegments": [1, 1, 32, 1]
+    }
+  },
+  "cone": {
+    "name": "Cone",
+    "parameters": {
+      "radius": [0.75, 0.1, 4, 0.01],
+      "height": [1.7, 0.1, 8, 0.01],
+      "radialSegments": [32, 3, 64, 1],
+      "heightSegments": [1, 1, 32, 1]
+    }
+  },
+  "plane": {
+    "name": "Plano",
+    "parameters": {
+      "width": [1.8, 0.1, 8, 0.01],
+      "height": [1.4, 0.1, 8, 0.01],
+      "widthSegments": [1, 1, 48, 1],
+      "heightSegments": [1, 1, 48, 1]
+    }
+  },
+  "capsule": {
+    "name": "Cápsula",
+    "parameters": {
+      "radius": [0.5, 0.1, 4, 0.01],
+      "length": [0.8, 0.1, 6, 0.01],
+      "capSegments": [8, 1, 24, 1],
+      "radialSegments": [24, 3, 48, 1],
+      "heightSegments": [1, 1, 24, 1]
+    }
+  },
+  "tetrahedron": {
+    "name": "Tetraedro",
+    "parameters": {
+      "radius": [0.95, 0.1, 4, 0.01],
+      "detail": [0, 0, 7, 1]
+    }
+  },
+  "octahedron": {
+    "name": "Octaedro",
+    "parameters": {
+      "radius": [0.9, 0.1, 4, 0.01],
+      "detail": [0, 0, 7, 1]
+    }
+  },
+  "dodecahedron": {
+    "name": "Dodecaedro",
+    "parameters": {
+      "radius": [0.9, 0.1, 4, 0.01],
+      "detail": [0, 0, 7, 1]
+    }
+  },
+  "icosahedron": {
+    "name": "Icosaedro",
+    "parameters": {
+      "radius": [0.9, 0.1, 4, 0.01],
+      "detail": [0, 0, 7, 1]
+    }
+  },
+  "torusKnot": {
+    "name": "Nó toroidal",
+    "parameters": {
+      "radius": [0.65, 0.1, 4, 0.01],
+      "tube": [0.18, 0.05, 2, 0.01],
+      "tubularSegments": [64, 8, 96, 1],
+      "radialSegments": [12, 3, 32, 1],
+      "p": [2, 1, 8, 1],
+      "q": [3, 1, 8, 1]
+    }
+  }
+}

@@ -315,7 +315,9 @@ public sealed class RoomStateStore
         }
     }
 
-    public static void ValidateEntity(EntityDto entity)
+    public static void ValidateEntity(EntityDto entity) => ValidateAndNormalizeGeometry(entity);
+
+    private static GeometryParametersDto? ValidateAndNormalizeGeometry(EntityDto entity)
     {
         if (entity is null ||
             entity.Position is null ||
@@ -336,10 +338,7 @@ public sealed class RoomStateStore
             throw new InvalidOperationException("Nome de objeto inválido.");
         }
 
-        if (entity.Type is not ("box" or "sphere" or "pyramid" or "torus"))
-        {
-            throw new InvalidOperationException("Tipo de geometria inválido.");
-        }
+        var (geometryParameters, halfSize) = GeometryCatalog.Describe(entity.Type, entity.GeometryParameters);
 
         if (entity.Color is null ||
             !Regex.IsMatch(entity.Color, "^#[0-9a-fA-F]{6}$", RegexOptions.CultureInvariant))
@@ -371,14 +370,6 @@ public sealed class RoomStateStore
             throw new InvalidOperationException("A escala deve estar entre 0,2 e 3,0.");
         }
 
-        var halfSize = entity.Type switch
-        {
-            "box" => (X: 0.75, Y: 0.75, Z: 0.75),
-            "sphere" => (X: 0.85, Y: 0.85, Z: 0.85),
-            "pyramid" => (X: 0.85, Y: 0.85, Z: 0.85),
-            "torus" => (X: 0.85, Y: 0.85, Z: 0.23),
-            _ => throw new InvalidOperationException("Tipo de geometria inválido.")
-        };
         var extents = GetWorldExtents(entity.Rotation, entity.Scale, halfSize);
         if (entity.Position.X - extents.X < -WorkspaceLimit - BoundsEpsilon ||
             entity.Position.X + extents.X > WorkspaceLimit + BoundsEpsilon ||
@@ -389,6 +380,7 @@ public sealed class RoomStateStore
         {
             throw new InvalidOperationException("A transformação ultrapassa os limites do cenário.");
         }
+        return geometryParameters;
     }
 
     private static (double X, double Y, double Z) GetWorldExtents(
@@ -415,14 +407,6 @@ public sealed class RoomStateStore
         var m32 = sxr * cz + cx * syr * szr;
         var m33 = cx * cy;
 
-        if (halfSize.X == halfSize.Y && halfSize.Y == halfSize.Z &&
-            rotation.X == 0 && rotation.Y == 0 && rotation.Z == 0 &&
-            scale.X == scale.Y && scale.Y == scale.Z &&
-            halfSize.X is 0.85)
-        {
-            return (halfSize.X * sx, halfSize.Y * sy, halfSize.Z * sz);
-        }
-
         return (
             Math.Abs(m11) * halfSize.X * sx + Math.Abs(m12) * halfSize.Y * sy + Math.Abs(m13) * halfSize.Z * sz,
             Math.Abs(m21) * halfSize.X * sx + Math.Abs(m22) * halfSize.Y * sy + Math.Abs(m23) * halfSize.Z * sz,
@@ -441,8 +425,8 @@ public sealed class RoomStateStore
 
     private static EntityDto CanonicalizeEntity(EntityDto entity)
     {
-        ValidateEntity(entity);
-        return entity with { Id = Guid.Parse(entity.Id).ToString() };
+        var geometry = ValidateAndNormalizeGeometry(entity);
+        return entity with { Id = Guid.Parse(entity.Id).ToString(), GeometryParameters = geometry };
     }
 
     private void RequireParticipant(string connectionId)
