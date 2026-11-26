@@ -125,8 +125,8 @@
             </ul>
           </section>
 
-          <section class="object-movement-controls" aria-labelledby="movement-title">
-            <h3 id="movement-title" class="control-section-title">Posicionamento</h3>
+          <details class="control-category object-movement-controls" open>
+            <summary id="movement-title" class="control-section-title">Posicionamento</summary>
             <button
               class="movement-toggle"
               type="button"
@@ -151,10 +151,10 @@
             >
               Redimensionar objeto
             </button>
-          </section>
+          </details>
 
-          <section class="object-controls" aria-labelledby="objects-title">
-            <h3 id="objects-title" class="control-section-title">Forma do objeto selecionado</h3>
+          <details class="control-category object-controls">
+            <summary id="objects-title" class="control-section-title">Geometria do objeto</summary>
             <div class="object-selector" role="group" aria-label="Escolha uma forma geométrica">
               <button class="object-option" type="button" data-object-shape="box" aria-pressed="true">
                 Cubo
@@ -169,10 +169,10 @@
                 Toroide
               </button>
             </div>
-          </section>
+          </details>
 
-          <section class="appearance-controls" aria-labelledby="appearance-title">
-            <h3 id="appearance-title" class="control-section-title">Cores e materiais</h3>
+          <details class="control-category appearance-controls">
+            <summary id="appearance-title" class="control-section-title">Cores e materiais</summary>
 
             <div class="color-presets" role="group" aria-label="Cores predefinidas">
               <button class="color-option" type="button" data-object-color="#6c8cff" aria-pressed="true">
@@ -217,10 +217,10 @@
             <button class="reset-appearance" type="button" data-reset-appearance>
               Restaurar aparência
             </button>
-          </section>
+          </details>
 
-          <section class="lighting-controls" aria-labelledby="lighting-title">
-            <h3 id="lighting-title" class="control-section-title">Iluminação</h3>
+          <details class="control-category lighting-controls">
+            <summary id="lighting-title" class="control-section-title">Iluminação</summary>
             <p class="lighting-description">
               A luz ambiente ilumina a cena de forma uniforme. A luz direcional
               vem de uma direção e cria contraste nas superfícies.
@@ -293,10 +293,10 @@
             <button class="reset-appearance reset-lighting" type="button" data-reset-lighting>
               Restaurar iluminação
             </button>
-          </section>
+          </details>
 
-          <section class="animation-controls" aria-labelledby="animation-title">
-            <h3 id="animation-title" class="control-section-title">Animações</h3>
+          <details class="control-category animation-controls">
+            <summary id="animation-title" class="control-section-title">Animações</summary>
             <p class="animation-description">
               A rotação é atualizada a cada quadro com base no tempo decorrido,
               mantendo um movimento consistente em diferentes telas. Ela começa
@@ -349,7 +349,7 @@
             <button class="reset-appearance reset-orientation" type="button" data-reset-orientation>
               Restaurar orientação
             </button>
-          </section>
+          </details>
           <p class="panel-footer">INTERAJA COM A CENA USANDO O MOUSE OU TOQUE</p>
         </aside>
       </main>

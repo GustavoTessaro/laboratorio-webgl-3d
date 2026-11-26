@@ -37,6 +37,7 @@
 - [x] V2-00 concluída com auditoria técnica e inventário de regressões.
 - [x] V2-01 documentada com PRD, TDD e plano incremental.
 - [ ] V2-02 verificada com gizmo, bloqueio, cancelamento, reconexão e contagem de gravações.
+- [x] V2-03 implementada e validada nas suítes automatizadas e no Chrome headless em modo local.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
 - [ ] Pelo menos um recurso avançado demonstrável em V2-08 ou V2-10.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
@@ -57,3 +58,16 @@ Cor personalizada e velocidade têm prévia local e uma confirmação por gesto 
 - [x] Integração SignalR via clientes Node.js em localhost e SQLite temporário. Verificou bloqueio concorrente, prévia visível, entrada com snapshot confirmado, confirmação, restauração ao liberar o bloqueio, desconexão durante prévia e retorno à sala.
 - [ ] Validar manualmente em dois navegadores o arraste com animação ativa, o seletor de cor nativo, a troca de seleção, o controle de velocidade e a reconexão durante a edição.
 - [ ] Verificar recuperação em Azure SQL em ambiente de teste e avaliar cenários de alta latência entre conexões. A comparação de snapshots da V2-02 dispensa revisões no contrato, mas não resolve todos os conflitos entre autores concorrentes.
+
+## Registro da V2-03
+
+O catálogo gráfico agrupa a fábrica, o nome e os limites de cada forma V1. Materiais e luzes padrão têm pontos de criação próprios. O registro de entidades conserva a transformação base, a pose de animação e a aplicação de snapshots. O controle de órbita e o gizmo ficam em um módulo gráfico próprio. `scene.js` coordena câmera, renderer, seleção, rótulos e ciclo de renderização. `main.js` coordena a colaboração e delega os controles da interface ao painel.
+
+As categorias usam `details` e `summary` nativos, com abertura independente. Objetos e participantes continuam visíveis. Posicionamento começa aberto e geometria, aparência, iluminação e animação começam recolhidas. O painel mantém rolagem independente no desktop e, em telas estreitas, fica abaixo da cena com altura limitada.
+
+O encerramento da cena para o loop e o observer, remove listeners e descarta controles, malhas, auxiliares, texturas de presença, mapa de sombras e renderer. A desmontagem não publica exclusões. A página preserva a cena quando o navegador informa que a navegação a colocou no cache de retorno.
+
+- [x] Suíte JavaScript com 14 testes. As novas verificações cobrem a remoção dos listeners do painel, o cancelamento da prévia por bloqueio e o descarte idempotente da cena.
+- [x] Build Vite concluído com os avisos de anotações do SignalR e de tamanho do bundle. Build .NET concluído com zero avisos e 20 testes aprovados.
+- [x] Chrome headless com WebGL em modo local. Verificou abertura das categorias, criação e seleção de objetos, ativação de animação, rolagem independente e dimensões da cena em 1280 × 840 e 390 × 750. Eventos de saída simulados verificaram a preservação ou desmontagem do canvas conforme o sinal de cache do navegador.
+- [ ] Validar em dois navegadores reais o painel com bloqueios, troca de seleção, prévias do gizmo e reconexão. Conferir teclado e toque em dispositivos reais. As pendências de alta latência e Azure SQL da V2-02 permanecem abertas.
