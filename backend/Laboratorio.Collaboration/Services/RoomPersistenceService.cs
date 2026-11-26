@@ -503,8 +503,8 @@ public sealed class RoomPersistenceService(
         try
         {
             EnsureReady();
-            var updated = store.UpdateEntity(connectionId, entity);
-            if (!final)
+            var updated = store.UpdateEntity(connectionId, entity, final);
+            if (!final || (_persistedEntities.TryGetValue(updated.Id, out var persisted) && persisted == updated))
             {
                 return updated;
             }

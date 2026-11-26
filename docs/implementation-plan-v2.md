@@ -44,3 +44,16 @@
 - [ ] V2-15 com resultados dos testes, build, medições e recuperação da sala.
 - [ ] V2-16 com evidências dos dez requisitos, qualidade visual, interação, animação e recurso avançado.
 - [ ] V2-17 com README, ordem de publicação verificada e demonstração pronta para 11/12.
+
+## Registro da V2-02
+
+A implementação mantém a transformação base separada da pose visual e conserva `animation.enabled` durante o gizmo. A edição aplica à base o deslocamento produzido pelo gizmo, a rotação relativa ou a escala escolhida. Ao confirmar uma manipulação com mudança, a reprodução recomeça a partir da nova base. Ativar ou trocar de eixo começa na base, desativar volta à base e mudar a velocidade mantém a fase local. Alterações de cor e material preservam a base e a fase. O frontend e o backend usam as mesmas semidimensões conservadoras e tolerância de 0,000001 para as formas atuais.
+
+Cor personalizada e velocidade têm prévia local e uma confirmação por gesto alterado. O reset de aparência confirma cor e modo em uma operação. O gizmo conserva as prévias compartilhadas de 100 ms, invalida prévias ainda na fila ao terminar e serializa a confirmação após qualquer prévia já em trânsito. O servidor difunde prévias sem incluí-las no snapshot confirmado ou no SQL e restaura a versão confirmada para os participantes quando um bloqueio com prévia é encerrado sem confirmação. Na reconexão, a fila descarta prévias e compara confirmações pendentes com o snapshot da sala para evitar reaplicar uma edição sobre uma versão divergente. O protocolo e o schema permanecem compatíveis com a V1.
+
+- [x] Suíte JavaScript com 12 testes, incluindo os três modos do gizmo, independência da pose, cor durante animação, ativação e desativação, cancelamento, teclado, reset e invalidação de prévias.
+- [x] Build Vite concluído. Permanecem os avisos de anotações do pacote SignalR e de tamanho do bundle.
+- [x] Build .NET concluído com zero avisos e suíte completa com 20 testes. O teste de persistência contou gravações no SQLite em memória, incluindo prévia, confirmação sem mudança e confirmação efetiva.
+- [x] Integração SignalR via clientes Node.js em localhost e SQLite temporário. Verificou bloqueio concorrente, prévia visível, entrada com snapshot confirmado, confirmação, restauração ao liberar o bloqueio, desconexão durante prévia e retorno à sala.
+- [ ] Validar manualmente em dois navegadores o arraste com animação ativa, o seletor de cor nativo, a troca de seleção, o controle de velocidade e a reconexão durante a edição.
+- [ ] Verificar recuperação em Azure SQL em ambiente de teste e avaliar cenários de alta latência entre conexões. A comparação de snapshots da V2-02 dispensa revisões no contrato, mas não resolve todos os conflitos entre autores concorrentes.

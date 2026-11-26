@@ -33,9 +33,12 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
 
     public async Task<LockResultDto> AcquireEditLock(string entityId)
     {
-        var result = store.AcquireLock(Context.ConnectionId, entityId);
+        var discardedPreview = false;
+        var result = store.AcquireLock(Context.ConnectionId, entityId, _ => discardedPreview = true);
         if (result.Granted)
         {
+            if (discardedPreview)
+                await BroadcastConfirmedAsync(Clients.Group(CollaborationProtocol.RoomId), store, entityId);
             var entityLock = store.GetLock(entityId)!;
             await Clients.Group(CollaborationProtocol.RoomId).SendAsync("LockChanged", entityLock);
         }
@@ -50,8 +53,11 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
 
     public async Task ReleaseEditLock(string entityId)
     {
-        if (store.ReleaseLock(Context.ConnectionId, entityId))
+        var discardedPreview = false;
+        if (store.ReleaseLock(Context.ConnectionId, entityId, _ => discardedPreview = true))
         {
+            if (discardedPreview)
+                await BroadcastConfirmedAsync(Clients.OthersInGroup(CollaborationProtocol.RoomId), store, entityId);
             await Clients.Group(CollaborationProtocol.RoomId)
                 .SendAsync("LockChanged", new EditLockDto(entityId, string.Empty, string.Empty));
         }
@@ -134,7 +140,8 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var departure = store.Leave(Context.ConnectionId);
+        var discardedPreviews = new HashSet<string>(StringComparer.Ordinal);
+        var departure = store.Leave(Context.ConnectionId, id => { discardedPreviews.Add(id); });
         var participant = departure.Participant;
         if (participant is not null)
         {
@@ -143,6 +150,9 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         }
         foreach (var releasedLock in departure.ReleasedLocks)
         {
+            if (discardedPreviews.Contains(releasedLock.EntityId))
+                await BroadcastConfirmedAsync(
+                    Clients.OthersInGroup(CollaborationProtocol.RoomId), store, releasedLock.EntityId);
             await Clients.OthersInGroup(CollaborationProtocol.RoomId)
                 .SendAsync("LockChanged", new EditLockDto(
                     releasedLock.EntityId,
@@ -151,5 +161,14 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         }
 
         await base.OnDisconnectedAsync(exception);
+    }
+
+    internal static Task BroadcastConfirmedAsync(
+        IClientProxy clients, RoomStateStore store, string entityId, CancellationToken cancellationToken = default)
+    {
+        var entity = store.GetEntity(entityId);
+        return entity is null
+            ? Task.CompletedTask
+            : clients.SendAsync("EntityUpserted", entity, cancellationToken);
     }
 }

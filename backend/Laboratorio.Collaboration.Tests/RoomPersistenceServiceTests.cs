@@ -91,6 +91,44 @@ public sealed class RoomPersistenceServiceTests
     }
 
     [Fact]
+    public async Task PreviewsAndUnchangedConfirmationsDoNotWriteOrEnterTheRoomSnapshot()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var store = new RoomStateStore();
+        var service = CreateService(CreateFactory(connection, interceptor), store);
+        await StartAndWaitAsync(service);
+        await service.JoinAsync("ana", "Ana", 1, []);
+        var created = await service.CreateEntityAsync("ana", CreateBox());
+        var writes = interceptor.CommitCount;
+        Assert.True(store.AcquireLock("ana", created.Id).Granted);
+
+        var gesture = created with { Position = new Vector3Dto(3, 2, 1) };
+        Assert.Equal(gesture, await service.UpdateEntityAsync("ana", gesture, false));
+        Assert.Equal(created, Assert.Single((await service.JoinAsync("bia", "Bia", 1, [])).Entities));
+        Assert.Equal(writes, interceptor.CommitCount);
+
+        var discarded = new List<string>();
+        Assert.True(store.ReleaseLock("ana", created.Id, discarded.Add));
+        Assert.Equal(created.Id, Assert.Single(discarded));
+        Assert.True(store.AcquireLock("bia", created.Id).Granted);
+        await service.UpdateEntityAsync("bia", created, true);
+        Assert.Equal(writes, interceptor.CommitCount);
+
+        await service.UpdateEntityAsync("bia", gesture, false);
+        var final = await service.UpdateEntityAsync("bia", gesture, true);
+        Assert.Equal("Bia", final.LastEditor);
+        Assert.Equal(writes + 1, interceptor.CommitCount);
+        Assert.Equal(final, Assert.Single(store.GetSnapshot().Entities));
+        Assert.Equal(final, await service.UpdateEntityAsync("bia", gesture, true));
+        Assert.Equal(writes + 1, interceptor.CommitCount);
+        discarded.Clear();
+        store.Leave("bia", discarded.Add);
+        Assert.Empty(discarded);
+        Assert.Equal(final, store.GetEntity(created.Id));
+    }
+
+    [Fact]
     public async Task FailedFinalWriteRollsBackMemoryAndReportsFailure()
     {
         await using var connection = await OpenDatabaseAsync();
@@ -431,6 +469,8 @@ public sealed class RoomPersistenceServiceTests
     private sealed class ThrowAfterCommitInterceptor : SaveChangesInterceptor
     {
         private int _shouldThrow;
+        private int _commitCount;
+        public int CommitCount => Volatile.Read(ref _commitCount);
 
         public void ThrowAfterNextCommit() => Interlocked.Exchange(ref _shouldThrow, 1);
 
@@ -439,6 +479,7 @@ public sealed class RoomPersistenceServiceTests
             int result,
             CancellationToken cancellationToken = default)
         {
+            Interlocked.Increment(ref _commitCount);
             if (Interlocked.Exchange(ref _shouldThrow, 0) == 1)
             {
                 throw new TimeoutException("Simulated lost acknowledgement after database commit.");

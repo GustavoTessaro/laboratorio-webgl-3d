@@ -14,10 +14,14 @@ public sealed class LockLeaseCleanupService(
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            foreach (var expiredLock in store.ExpireLocks())
+            var discardedPreviews = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var expiredLock in store.ExpireLocks(id => { discardedPreviews.Add(id); }))
             {
                 try
                 {
+                    if (discardedPreviews.Contains(expiredLock.EntityId))
+                        await LaboratoryHub.BroadcastConfirmedAsync(
+                            hubContext.Clients.Group(CollaborationProtocol.RoomId), store, expiredLock.EntityId, stoppingToken);
                     await hubContext.Clients.Group(CollaborationProtocol.RoomId)
                         .SendAsync("LockChanged", new EditLockDto(
                             expiredLock.EntityId,

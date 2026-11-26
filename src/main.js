@@ -1,6 +1,7 @@
 import './style.css';
 import { createScene } from './scene.js';
 import { CollaborationClient } from './collaboration.js';
+import { bindLocalInput, createTransformPreviews } from './edit-gestures.js';
 
 const container = document.querySelector('#scene-container');
 const message = document.querySelector('#webgl-message');
@@ -46,16 +47,27 @@ const collaborationMessage = document.querySelector('#collaboration-message');
 const participantList = document.querySelector('#participant-list');
 const useLocalButton = document.querySelector('[data-collaboration-local]');
 
+function sameEntityState(first, second) {
+  if (!first || !second) return first === second;
+  return ['id', 'name', 'type', 'color', 'materialMode'].every((key) => first[key] === second[key]) &&
+    ['position', 'rotation', 'scale'].every((key) =>
+      ['x', 'y', 'z'].every((axis) => first[key][axis] === second[key][axis]),
+    ) &&
+    ['enabled', 'axis', 'speed'].every((key) => first.animation[key] === second.animation[key]);
+}
+
 try {
   const sceneControls = createScene(container);
   const serverEntities = new Map();
   const participants = new Map();
   const editLocks = new Map();
   const pendingOperations = [];
-  const activeEdits = new Set();
-  const deniedEdits = new Set();
-  const pendingContinuousUpdates = new Map();
-  const continuousTimers = new Map();
+  const activeEdits = new Map();
+  const localInputs = [];
+  const previews = createTransformPreviews((entity, isCurrent) =>
+    enqueueOperation({ kind: 'update', entity, final: false, isCurrent }),
+  );
+  let inFlightUpdate = null;
   let collaborationClient = null;
   let collaborationConnected = false;
   let operationQueue = Promise.resolve();
@@ -82,9 +94,12 @@ try {
     collaborationOpenButton.disabled = state === 'connected' || loading;
     collaborationSubmitButton.disabled = state === 'connected' || loading;
     if (state === 'disconnected' || state === 'reconnecting' || state === 'error') {
+      for (const id of activeEdits.keys()) previews.end(id);
+      activeEdits.clear();
+      sceneControls.cancelTransformEdit();
+      cancelLocalInputs();
       participants.clear();
       editLocks.clear();
-      deniedEdits.clear();
       for (const entityId of serverEntities.keys()) updatePresence(entityId);
       renderParticipants();
       if (sceneControls.getSelectedEntity()) {
@@ -127,9 +142,16 @@ try {
     }
   }
 
+  function cancelLocalInputs(entityId) {
+    for (const input of localInputs) {
+      if (entityId === undefined || input.entity?.id === entityId) input.cancel();
+    }
+  }
+
   async function processOperation(operation) {
+    if (operation.isCurrent && !operation.isCurrent()) return;
     if (!collaborationClient?.connected) {
-      pendingOperations.push(operation);
+      if (operation.final !== false) pendingOperations.push(operation);
       return;
     }
     if (operation.kind === 'delete') {
@@ -140,14 +162,22 @@ try {
         showCollaborationMessage(lock.reason ?? `Objeto bloqueado por ${lock.ownerName}.`);
         return;
       }
-      await collaborationClient.deleteEntity(operation.id);
-      serverEntities.delete(operation.id);
+      try {
+        await collaborationClient.deleteEntity(operation.id);
+        serverEntities.delete(operation.id);
+        sceneControls.removeSharedEntity(operation.id);
+      } finally {
+        if (collaborationClient.heldLocks.has(operation.id)) {
+          await collaborationClient.releaseEditLock(operation.id);
+        }
+      }
       return;
     }
 
     const entity = operation.entity;
-    if (deniedEdits.has(entity.id)) return;
     const exists = serverEntities.has(entity.id);
+    const known = serverEntities.get(entity.id);
+    if (operation.final && sameEntityState(known, entity)) return;
     if (operation.kind === 'create' && !exists) {
       const created = await collaborationClient.createEntity(entity);
       serverEntities.set(created.id, created);
@@ -156,6 +186,7 @@ try {
     }
 
     if (!exists) {
+      if (operation.final === false || operation.expected) return;
       const created = await collaborationClient.createEntity(entity);
       serverEntities.set(created.id, created);
       updatePresence(created.id);
@@ -163,9 +194,13 @@ try {
     }
 
     const lock = await collaborationClient.acquireEditLock(entity.id);
+    if (operation.isCurrent && !operation.isCurrent()) return;
     if (!lock.granted) {
-      if (activeEdits.has(entity.id)) deniedEdits.add(entity.id);
+      if (activeEdits.has(entity.id)) {
+        sceneControls.cancelTransformEdit();
+      }
       restoreServerEntity(entity.id);
+      syncSelectedEntity();
       showCollaborationMessage(
         lock.ownerName
           ? `Esse objeto está sendo editado por ${lock.ownerName}.`
@@ -174,65 +209,88 @@ try {
       return;
     }
     try {
+      if (operation.replaying && !sameEntityState(serverEntities.get(entity.id), operation.replayExpected)) {
+        showCollaborationMessage('O objeto mudou antes que a alteração pendente pudesse ser enviada.');
+        return;
+      }
+      if (operation.final !== false) inFlightUpdate = entity;
       const updated = await collaborationClient.updateEntity(entity, operation.final !== false);
-      serverEntities.set(updated.id, updated);
-      updatePresence(updated.id);
+      if (operation.final !== false) {
+        serverEntities.set(updated.id, updated);
+        if (operation.replaying && !activeEdits.has(updated.id)) sceneControls.applySharedEntity(updated);
+        updatePresence(updated.id);
+      }
     } finally {
-      if (!activeEdits.has(entity.id)) await collaborationClient.releaseEditLock(entity.id);
+      inFlightUpdate = null;
+      if (!activeEdits.has(entity.id) && !operation.transform && operation.final !== false) {
+        await collaborationClient.releaseEditLock(entity.id);
+      }
     }
   }
 
   function enqueueOperation(operation) {
+    if (operation.kind === 'update' && operation.final) {
+      operation.expected = serverEntities.get(operation.entity.id);
+    }
     if (!collaborationConnected) {
-      pendingOperations.push(operation);
+      if (operation.final !== false) pendingOperations.push(operation);
       return Promise.resolve();
     }
     const task = operationQueue.then(() => processOperation(operation));
     operationQueue = task.catch((error) => {
-      pendingOperations.push(operation);
-      showCollaborationMessage(`Alteração mantida localmente e aguardando envio: ${error.message}`);
+      if (operation.final === false) return;
+      if (!collaborationClient?.connected || operation.kind !== 'update') {
+        pendingOperations.push(operation);
+        showCollaborationMessage(`Alteração mantida localmente e aguardando envio: ${error.message}`);
+      } else {
+        restoreServerEntity(operation.entity.id);
+        showCollaborationMessage(`Não foi possível confirmar a alteração: ${error.message}`);
+      }
     });
     return operationQueue;
   }
 
   function publishEntity(entity, continuous = false) {
     if (!entity) return Promise.resolve();
-    if (!continuous) {
-      const timer = continuousTimers.get(entity.id);
-      if (timer) window.clearTimeout(timer);
-      continuousTimers.delete(entity.id);
-      pendingContinuousUpdates.delete(entity.id);
-      return enqueueOperation({ kind: 'update', entity, final: true });
-    }
-
-    pendingContinuousUpdates.set(entity.id, entity);
-    if (continuousTimers.has(entity.id)) return Promise.resolve();
-    continuousTimers.set(entity.id, window.setTimeout(() => {
-      continuousTimers.delete(entity.id);
-      const latest = pendingContinuousUpdates.get(entity.id);
-      pendingContinuousUpdates.delete(entity.id);
-      if (latest) enqueueOperation({ kind: 'update', entity: latest, final: false });
-    }, 100));
-    return Promise.resolve();
+    if (continuous) return previews.push(entity);
+    return enqueueOperation({ kind: 'update', entity, final: true });
   }
 
-  async function flushPendingOperations() {
-    const batch = pendingOperations.splice(0);
-    for (let index = 0; index < batch.length; index += 1) {
-      try {
-        await processOperation(batch[index]);
-      } catch (error) {
-        pendingOperations.unshift(...batch.slice(index));
-        showCollaborationMessage(`Alterações aguardam sincronização: ${error.message}`);
-        return;
+  function flushPendingOperations() {
+    operationQueue = operationQueue.then(async () => {
+      const batch = pendingOperations.splice(0);
+      const beforeReplay = new Map(serverEntities);
+      for (let index = 0; index < batch.length; index += 1) {
+        const operation = batch[index];
+        if (operation.expected) {
+          const current = beforeReplay.get(operation.entity.id);
+          if (!sameEntityState(current, operation.expected) && !sameEntityState(current, operation.entity)) {
+            showCollaborationMessage('Um objeto mudou na sala durante a desconexão. A versão compartilhada foi preservada.');
+            continue;
+          }
+        }
+        try {
+          await processOperation({
+            ...operation,
+            transform: false,
+            replaying: true,
+            replayExpected: operation.entity && serverEntities.get(operation.entity.id),
+          });
+        } catch (error) {
+          pendingOperations.unshift(...batch.slice(index));
+          showCollaborationMessage(`Alterações aguardam sincronização: ${error.message}`);
+          return;
+        }
       }
-    }
+    });
+    return operationQueue;
   }
 
   function applyRoomSnapshot(snapshot) {
     if (snapshot.protocolVersion !== 1) {
       throw new Error('A sala usa uma versão de protocolo incompatível.');
     }
+    cancelLocalInputs();
     serverEntities.clear();
     for (const entity of snapshot.entities) serverEntities.set(entity.id, entity);
     participants.clear();
@@ -260,23 +318,32 @@ try {
       },
       onEntityUpserted: (entity) => {
         serverEntities.set(entity.id, entity);
-        sceneControls.applySharedEntity(entity);
+        if (!sameEntityState(inFlightUpdate, entity)) {
+          cancelLocalInputs(entity.id);
+          if (activeEdits.has(entity.id)) sceneControls.cancelTransformEdit();
+          sceneControls.applySharedEntity(entity);
+        }
         updatePresence(entity.id);
         renderEntityList();
         if (sceneControls.getSelectedEntity()?.id === entity.id) syncSelectedEntity();
       },
       onEntityDeleted: (entityId) => {
+        cancelLocalInputs(entityId);
         serverEntities.delete(entityId);
         editLocks.delete(entityId);
         sceneControls.removeSharedEntity(entityId);
         renderEntityList();
       },
       onLockChanged: (lock) => {
+        const ownLock = editLocks.get(lock.entityId)?.participantId === collaborationClient.connection.connectionId;
         if (!lock.participantId) {
           editLocks.delete(lock.entityId);
-          if (!activeEdits.has(lock.entityId)) deniedEdits.delete(lock.entityId);
         } else {
           editLocks.set(lock.entityId, lock);
+        }
+        if (ownLock && lock.participantId !== collaborationClient.connection.connectionId &&
+            activeEdits.has(lock.entityId)) {
+          sceneControls.cancelTransformEdit();
         }
         updatePresence(lock.entityId);
         renderEntityList();
@@ -288,8 +355,7 @@ try {
         }
       },
       onLockLost: (entityId) => {
-        activeEdits.delete(entityId);
-        deniedEdits.add(entityId);
+        if (activeEdits.has(entityId)) sceneControls.cancelTransformEdit();
         restoreServerEntity(entityId);
         if (sceneControls.getSelectedEntity()?.id === entityId) syncSelectedEntity();
         showCollaborationMessage('O bloqueio expirou; a última versão compartilhada foi restaurada.');
@@ -309,51 +375,41 @@ try {
     },
     onEntityDeleted: (id) => enqueueOperation({ kind: 'delete', id }),
     onEntityChanged: (entity, { continuous }) => publishEntity(entity, continuous),
-    onEditStateChange: async (entityId, editing, finalEntity) => {
+    onEditStateChange: (entityId, editing, finalEntity) => {
       if (editing) {
-        activeEdits.add(entityId);
-        deniedEdits.delete(entityId);
+        const edit = {};
+        activeEdits.set(entityId, edit);
         if (!collaborationConnected) return;
-        let lock;
-        try {
-          lock = await collaborationClient.acquireEditLock(entityId);
-        } catch (error) {
-          deniedEdits.add(entityId);
-          activeEdits.delete(entityId);
+        previews.start(entityId);
+        operationQueue = operationQueue.then(async () => {
+          if (activeEdits.get(entityId) !== edit || !collaborationClient?.connected) return;
+          const lock = await collaborationClient.acquireEditLock(entityId);
+          if (!lock.granted) throw new Error(lock.reason ?? `Objeto bloqueado por ${lock.ownerName}.`);
+        }).catch((error) => {
+          if (activeEdits.get(entityId) !== edit) return;
+          sceneControls.cancelTransformEdit();
           restoreServerEntity(entityId);
-          if (sceneControls.getSelectedEntity()?.id === entityId) syncSelectedEntity();
-          showCollaborationMessage(`Não foi possível bloquear o objeto: ${error.message}`);
-          return;
-        }
-        if (!lock.granted) {
-          deniedEdits.add(entityId);
-          activeEdits.delete(entityId);
-          restoreServerEntity(entityId);
-          if (sceneControls.getSelectedEntity()?.id === entityId) syncSelectedEntity();
-          showCollaborationMessage(
-            lock.ownerName
-              ? `Esse objeto está sendo editado por ${lock.ownerName}.`
-              : lock.reason ?? 'Não foi possível obter o bloqueio do objeto.',
-          );
-        }
+          syncSelectedEntity();
+          showCollaborationMessage(error.message);
+        });
         return;
       }
 
-      if (deniedEdits.has(entityId)) {
-        restoreServerEntity(entityId);
-        deniedEdits.delete(entityId);
-        activeEdits.delete(entityId);
-        if (sceneControls.getSelectedEntity()?.id === entityId) syncSelectedEntity();
-        return;
+      previews.end(entityId);
+      const edit = activeEdits.get(entityId);
+      activeEdits.delete(entityId);
+      if (!edit) return;
+      if (finalEntity) {
+        enqueueOperation({ kind: 'update', entity: finalEntity, final: true, transform: true });
       }
-      try {
-        if (finalEntity) await publishEntity(finalEntity, false);
-        activeEdits.delete(entityId);
-        if (collaborationConnected) await collaborationClient.releaseEditLock(entityId);
-      } catch (error) {
-        activeEdits.delete(entityId);
+      operationQueue = operationQueue.then(async () => {
+        if (!activeEdits.has(entityId) && collaborationClient?.connected &&
+            collaborationClient.heldLocks.has(entityId)) {
+          await collaborationClient.releaseEditLock(entityId);
+        }
+      }).catch((error) => {
         showCollaborationMessage(`Falha ao finalizar a edição: ${error.message}`);
-      }
+      });
     },
   });
 
@@ -382,7 +438,10 @@ try {
     const lockedByAnotherParticipant = Boolean(
       selectedLock &&
       selectedLock.participantId !== collaborationClient?.connection.connectionId,
-    ) || Boolean(entity && deniedEdits.has(entity.id));
+    );
+    for (const input of localInputs) {
+      if (input.entity && (input.entity !== entity || lockedByAnotherParticipant)) input.cancel();
+    }
     sceneControls.setSelectedEntityEditable(!lockedByAnotherParticipant);
     const selectionDependentControls = [
       ...objectButtons,
@@ -424,7 +483,7 @@ try {
     objectButtons.forEach((button) => {
       button.setAttribute('aria-pressed', String(button.dataset.objectShape === entity.type));
     });
-    updateColorSelection(entity.color);
+    if (!localInputs[0]?.entity) updateColorSelection(entity.color);
     materialButtons.forEach((button) => {
       button.setAttribute('aria-pressed', String(
         button.dataset.materialMode === entity.materialMode,
@@ -437,8 +496,10 @@ try {
     rotationStatus.textContent = entity.animation.enabled
       ? 'Animação ativa'
       : 'Animação pausada';
-    rotationSpeedInput.value = String(entity.animation.speed);
-    rotationSpeedOutput.value = `${entity.animation.speed}°/s`;
+    if (!localInputs[1]?.entity) {
+      rotationSpeedInput.value = String(entity.animation.speed);
+      rotationSpeedOutput.value = `${entity.animation.speed}°/s`;
+    }
     rotationAxisButtons.forEach((button) => {
       button.setAttribute('aria-pressed', String(button.dataset.rotationAxis === entity.animation.axis));
     });
@@ -574,28 +635,7 @@ try {
       return;
     }
 
-    void (async () => {
-      try {
-        const lock = await collaborationClient.acquireEditLock(entity.id);
-        if (!lock.granted) {
-          showCollaborationMessage(lock.reason ?? `Objeto bloqueado por ${lock.ownerName}.`);
-          return;
-        }
-        await collaborationClient.deleteEntity(entity.id);
-        serverEntities.delete(entity.id);
-        sceneControls.removeSharedEntity(entity.id);
-      } catch (error) {
-        showCollaborationMessage(`Não foi possível excluir o objeto: ${error.message}`);
-      } finally {
-        try {
-          if (collaborationClient.heldLocks.has(entity.id)) {
-            await collaborationClient.releaseEditLock(entity.id);
-          }
-        } catch (error) {
-          showCollaborationMessage(`Falha ao liberar o bloqueio: ${error.message}`);
-        }
-      }
-    })();
+    enqueueOperation({ kind: 'delete', id: entity.id });
   });
 
   copyPropertiesButton.addEventListener('click', () => {
@@ -633,10 +673,18 @@ try {
     });
   });
 
-  customColorInput.addEventListener('input', () => {
-    sceneControls.setColor(customColorInput.value);
-    syncSelectedEntity();
-  });
+  localInputs.push(bindLocalInput(customColorInput, {
+    getEntity: sceneControls.getSelectedEntity,
+    preview: (value, entity) => entity.mesh.material.color.set(value),
+    restore: (entity) => {
+      entity.mesh.material.color.set(entity.color);
+      if (sceneControls.getSelectedEntity() === entity) updateColorSelection(entity.color);
+    },
+    commit: (value, entity) => {
+      sceneControls.setColor(value, entity);
+      syncSelectedEntity();
+    },
+  }));
 
   materialButtons.forEach((button) => {
     button.addEventListener('click', () => {
@@ -679,11 +727,24 @@ try {
     syncSelectedEntity();
   });
 
-  rotationSpeedInput.addEventListener('input', () => {
-    const degreesPerSecond = Number(rotationSpeedInput.value);
-    sceneControls.setRotationSpeed(degreesPerSecond);
-    rotationSpeedOutput.value = `${degreesPerSecond}°/s`;
-  });
+  localInputs.push(bindLocalInput(rotationSpeedInput, {
+    getEntity: sceneControls.getSelectedEntity,
+    preview: (value, entity) => {
+      entity.previewRotationSpeed = Number(value);
+      rotationSpeedOutput.value = `${value}°/s`;
+    },
+    restore: (entity) => {
+      entity.previewRotationSpeed = undefined;
+      if (sceneControls.getSelectedEntity() === entity) {
+        rotationSpeedInput.value = String(entity.animation.speed);
+        rotationSpeedOutput.value = `${entity.animation.speed}°/s`;
+      }
+    },
+    commit: (value, entity) => {
+      sceneControls.setRotationSpeed(Number(value), entity);
+      syncSelectedEntity();
+    },
+  }));
 
   rotationAxisButtons.forEach((button) => {
     button.addEventListener('click', () => {

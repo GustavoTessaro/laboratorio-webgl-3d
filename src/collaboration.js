@@ -53,6 +53,7 @@ export class CollaborationClient {
     this.connection.onreconnecting(() => {
       this.joined = false;
       this.heldLocks.clear();
+      this.pendingLocks.clear();
       this.handlers.onStatus?.('reconnecting', 'Reconectando à sala…');
     });
     this.connection.onreconnected(async () => {
@@ -73,6 +74,7 @@ export class CollaborationClient {
     this.connection.onclose(() => {
       this.joined = false;
       this.heldLocks.clear();
+      this.pendingLocks.clear();
       this.stopRenewal();
       this.handlers.onStatus?.('disconnected', 'Colaboração desconectada · modo local');
     });
@@ -176,15 +178,21 @@ export class CollaborationClient {
     if (this.heldLocks.has(entityId)) return { granted: true };
     if (this.pendingLocks.has(entityId)) return this.pendingLocks.get(entityId);
 
+    const connectionId = this.connection.connectionId;
     const request = this.connection.invoke('AcquireEditLock', entityId)
       .then((result) => {
+        if (!this.connected || connectionId !== this.connection.connectionId) {
+          return { granted: false, reason: 'A conexão mudou durante o bloqueio.' };
+        }
         if (result.granted) {
           this.heldLocks.add(entityId);
           this.startRenewal();
         }
         return result;
       })
-      .finally(() => this.pendingLocks.delete(entityId));
+      .finally(() => {
+        if (this.pendingLocks.get(entityId) === request) this.pendingLocks.delete(entityId);
+      });
     this.pendingLocks.set(entityId, request);
     return request;
   }
@@ -215,6 +223,7 @@ export class CollaborationClient {
     this.joined = false;
     this.stopRenewal();
     this.heldLocks.clear();
+    this.pendingLocks.clear();
     const attempt = this.stopConnection();
     this.stopPromise = attempt;
     try {
@@ -234,9 +243,11 @@ export class CollaborationClient {
     if (this.renewalTimer) return;
     this.renewalTimer = window.setInterval(async () => {
       if (!this.connected) return;
+      const connectionId = this.connection.connectionId;
       for (const entityId of this.heldLocks) {
         try {
           const renewed = await this.connection.invoke('RenewEditLock', entityId);
+          if (!this.connected || connectionId !== this.connection.connectionId) return;
           if (!renewed) {
             this.heldLocks.delete(entityId);
             this.handlers.onLockLost?.(entityId);

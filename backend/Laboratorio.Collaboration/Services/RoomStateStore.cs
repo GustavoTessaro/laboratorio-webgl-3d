@@ -10,6 +10,7 @@ public sealed class RoomStateStore
     private const int MaximumNameLength = 32;
     private const double WorkspaceLimit = 10;
     private const double WorkspaceHeight = 10;
+    private const double BoundsEpsilon = 1e-6;
 
     private readonly object _sync = new();
     private readonly Dictionary<string, EntityDto> _entities = new(StringComparer.Ordinal);
@@ -143,7 +144,8 @@ public sealed class RoomStateStore
         }
     }
 
-    public (ParticipantDto? Participant, IReadOnlyList<EditLockDto> ReleasedLocks) Leave(string connectionId)
+    public (ParticipantDto? Participant, IReadOnlyList<EditLockDto> ReleasedLocks) Leave(
+        string connectionId, Action<string>? discardPreview = null)
     {
         lock (_sync)
         {
@@ -157,6 +159,8 @@ public sealed class RoomStateStore
                          .ToArray();
             foreach (var entityLock in releasedLocks)
             {
+                if (_locks[entityLock.EntityId].HasPreview)
+                    discardPreview?.Invoke(entityLock.EntityId);
                 _locks.Remove(entityLock.EntityId);
             }
 
@@ -164,15 +168,15 @@ public sealed class RoomStateStore
         }
     }
 
-    public IReadOnlyList<EditLockDto> ExpireLocks()
+    public IReadOnlyList<EditLockDto> ExpireLocks(Action<string>? discardPreview = null)
     {
         lock (_sync)
         {
-            return ExpireLocksUnsafe();
+            return ExpireLocksUnsafe(discardPreview);
         }
     }
 
-    public LockResultDto AcquireLock(string connectionId, string entityId)
+    public LockResultDto AcquireLock(string connectionId, string entityId, Action<string>? discardPreview = null)
     {
         lock (_sync)
         {
@@ -186,8 +190,9 @@ public sealed class RoomStateStore
                 return new LockResultDto(false, Reason: "O objeto não existe mais na sala.");
             }
 
+            var now = _timeProvider.GetUtcNow();
             if (_locks.TryGetValue(entityId, out var existing) &&
-                existing.ExpiresAt > _timeProvider.GetUtcNow() &&
+                existing.ExpiresAt > now &&
                 existing.ParticipantId != connectionId)
             {
                 return new LockResultDto(false, existing.ParticipantName, "Objeto bloqueado por outro participante.");
@@ -196,7 +201,11 @@ public sealed class RoomStateStore
             _locks[entityId] = new EntityLock(
                 connectionId,
                 participant.Name,
-                _timeProvider.GetUtcNow() + LockLease);
+                now + LockLease,
+                existing is { HasPreview: true } && existing.ParticipantId == connectionId &&
+                existing.ExpiresAt > now);
+            if (existing is { HasPreview: true } && !_locks[entityId].HasPreview)
+                discardPreview?.Invoke(entityId);
             return new LockResultDto(true);
         }
     }
@@ -228,13 +237,15 @@ public sealed class RoomStateStore
         }
     }
 
-    public bool ReleaseLock(string connectionId, string entityId)
+    public bool ReleaseLock(string connectionId, string entityId, Action<string>? discardPreview = null)
     {
         lock (_sync)
         {
-            return _locks.TryGetValue(entityId, out var entityLock) &&
-                   entityLock.ParticipantId == connectionId &&
-                   _locks.Remove(entityId);
+            if (!_locks.TryGetValue(entityId, out var entityLock) || entityLock.ParticipantId != connectionId)
+                return false;
+            if (entityLock.HasPreview)
+                discardPreview?.Invoke(entityId);
+            return _locks.Remove(entityId);
         }
     }
 
@@ -260,12 +271,22 @@ public sealed class RoomStateStore
         }
     }
 
-    public EntityDto UpdateEntity(string connectionId, EntityDto entity)
+    public EntityDto UpdateEntity(string connectionId, EntityDto entity, bool final = true)
     {
         entity = CanonicalizeEntity(entity);
         lock (_sync)
         {
             RequireLockOwner(connectionId, entity.Id);
+            var committed = _entities[entity.Id];
+            if (!final)
+            {
+                _locks[entity.Id] = _locks[entity.Id] with { HasPreview = true };
+                return entity with { LastEditor = committed.LastEditor };
+            }
+
+            _locks[entity.Id] = _locks[entity.Id] with { HasPreview = false };
+            if ((entity with { LastEditor = committed.LastEditor }) == committed)
+                return committed;
             var stored = entity with { LastEditor = _participants[connectionId].Name };
             _entities[stored.Id] = stored;
             return stored;
@@ -359,12 +380,12 @@ public sealed class RoomStateStore
             _ => throw new InvalidOperationException("Tipo de geometria inválido.")
         };
         var extents = GetWorldExtents(entity.Rotation, entity.Scale, halfSize);
-        if (entity.Position.X - extents.X < -WorkspaceLimit ||
-            entity.Position.X + extents.X > WorkspaceLimit ||
-            entity.Position.Y - extents.Y < 0 ||
-            entity.Position.Y + extents.Y > WorkspaceHeight ||
-            entity.Position.Z - extents.Z < -WorkspaceLimit ||
-            entity.Position.Z + extents.Z > WorkspaceLimit)
+        if (entity.Position.X - extents.X < -WorkspaceLimit - BoundsEpsilon ||
+            entity.Position.X + extents.X > WorkspaceLimit + BoundsEpsilon ||
+            entity.Position.Y - extents.Y < -BoundsEpsilon ||
+            entity.Position.Y + extents.Y > WorkspaceHeight + BoundsEpsilon ||
+            entity.Position.Z - extents.Z < -WorkspaceLimit - BoundsEpsilon ||
+            entity.Position.Z + extents.Z > WorkspaceLimit + BoundsEpsilon)
         {
             throw new InvalidOperationException("A transformação ultrapassa os limites do cenário.");
         }
@@ -456,7 +477,7 @@ public sealed class RoomStateStore
                 entry.Value.ParticipantName)).ToArray());
     }
 
-    private IReadOnlyList<EditLockDto> ExpireLocksUnsafe()
+    private IReadOnlyList<EditLockDto> ExpireLocksUnsafe(Action<string>? discardPreview)
     {
         var now = _timeProvider.GetUtcNow();
         var expired = _locks
@@ -465,11 +486,14 @@ public sealed class RoomStateStore
             .ToArray();
         foreach (var entityLock in expired)
         {
+            if (_locks[entityLock.EntityId].HasPreview)
+                discardPreview?.Invoke(entityLock.EntityId);
             _locks.Remove(entityLock.EntityId);
         }
 
         return expired;
     }
 
-    private sealed record EntityLock(string ParticipantId, string ParticipantName, DateTimeOffset ExpiresAt);
+    private sealed record EntityLock(
+        string ParticipantId, string ParticipantName, DateTimeOffset ExpiresAt, bool HasPreview);
 }
