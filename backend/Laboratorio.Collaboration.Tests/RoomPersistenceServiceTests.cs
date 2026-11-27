@@ -884,6 +884,36 @@ public sealed class RoomPersistenceServiceTests
         Assert.Equal(confirmed, Assert.Single((await restored.JoinAsync("bia", "Bia", CollaborationProtocol.Version, [])).Entities));
     }
 
+    [Fact]
+    public async Task CatalogModelPersistsOnlyItsKnownTypeAndWorksWithEnvironmentBatches()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var factory = CreateFactory(connection);
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        var model = CreateBox() with { Type = "model-satellite", Position = new(0, 4, 0),
+            Animation = new(true, "y", 45), Trajectory = new(Enabled: true) };
+        var created = await service.CreateEntityAsync("ana", model);
+        await service.ApplyEnvironmentAsync("ana", new EnvironmentCommandDto("geometry-lab", "add", Guid.NewGuid(), 1));
+        Assert.Equal(created, store.GetEntity(model.Id));
+        await using (var db = factory.CreateDbContext())
+        {
+            var stored = await db.RoomEntities.SingleAsync(item => item.Id == model.Id);
+            Assert.Equal("model-satellite", stored.Type);
+            Assert.Null(stored.MaterialSettingsJson);
+            Assert.Null(stored.GeometryParametersJson);
+        }
+        var restoredStore = new RoomStateStore();
+        var restored = CreateService(factory, restoredStore);
+        await StartAndWaitAsync(restored);
+        var joined = await restored.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
+        Assert.Contains(created, joined.Entities);
+        await restored.ApplyEnvironmentAsync("bia", new EnvironmentCommandDto("empty-scene", "replace", Guid.NewGuid(), 1));
+        Assert.Empty(restoredStore.GetSnapshot().Entities);
+    }
+
     private static EntityDto CreateBox() => new(
         Guid.NewGuid().ToString(),
         "Cubo",

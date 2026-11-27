@@ -124,6 +124,6 @@ public sealed record EnvironmentChangeDto(Guid OperationId, string Mode, EntityD
 
 public static class CollaborationProtocol
 {
-    public const int Version = 9;
+    public const int Version = 10;
     public const string RoomId = "laboratorio-principal";
 }

@@ -6,6 +6,31 @@ namespace Laboratorio.Collaboration.Tests;
 public sealed class RoomStateStoreTests
 {
     [Fact]
+    public void CatalogModelsRequireKnownIdsOriginalMaterialsAndSafeHierarchyBounds()
+    {
+        var entity = CreateBox() with { Type = "model-beacon", Position = new Vector3Dto(0, 4, 0) };
+        foreach (var type in new[] { "model-beacon", "model-arch", "model-satellite" })
+            RoomStateStore.ValidateEntity(entity with { Type = type, Trajectory = new(Enabled: true) });
+        foreach (var invalid in new[]
+        {
+            entity with { Type = "local-model" }, entity with { Type = "https://example.com/model.glb" },
+            entity with { Type = "model-unknown" },
+            entity with { GeometryParameters = new() { ["url"] = 1 } },
+            entity with { MaterialSettings = new(Kind: "basic") },
+            entity with { Position = new(0, 1.1, 0), Animation = new(true, "y", 45) },
+            entity with { Position = new(0, 1.1, 0), Trajectory = new(Enabled: true, Type: "helix", Height: -2) }
+        })
+            Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(invalid));
+
+        var store = new RoomStateStore();
+        store.Join("ana", "Ana", CollaborationProtocol.Version, []);
+        for (var i = 0; i < 6; i++)
+            store.CreateEntity("ana", entity with { Id = Guid.NewGuid().ToString() });
+        Assert.Throws<InvalidOperationException>(() => store.CreateEntity("ana", entity));
+        Assert.Equal(6, store.GetSnapshot().Entities.Count);
+    }
+
+    [Fact]
     public void KnownShadersValidateAndWaveUsesTheSameBoundsAsTheFrontend()
     {
         var entity = CreateBox() with { Position = new Vector3Dto(0, 3, 0) };

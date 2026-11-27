@@ -134,6 +134,10 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         {
             throw new HubException(exception.Message);
         }
+        catch (InvalidOperationException exception) when (ModelCatalog.Find(entity.Type) is not null)
+        {
+            throw new HubException($"Modelo rejeitado. {exception.Message}");
+        }
 
         await Clients.Group(CollaborationProtocol.RoomId).SendAsync("EntityUpserted", stored);
         return stored;

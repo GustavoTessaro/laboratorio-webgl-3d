@@ -1,0 +1,12 @@
+{
+  "limits": {
+    "fileBytes": 4194304, "jsonBytes": 524288, "buffers": 8, "nodes": 64, "meshes": 24, "primitives": 32,
+    "vertices": 24000, "triangles": 16384, "materials": 16, "textures": 8, "textureSide": 1024,
+    "pixels": 2097152, "sceneModels": 6, "sceneVertices": 60000, "sceneTriangles": 40000, "scenePixels": 6291456
+  },
+  "models": {
+    "model-beacon": { "name": "Farol modular", "file": "beacon.glb", "bytes": 6704, "halfSize": [0.591306, 1.000001, 0.591306], "vertices": 96, "triangles": 48, "meshes": 4, "materials": 4, "textures": 0, "pixels": 0 },
+    "model-arch": { "name": "Pórtico de blocos", "file": "arch.glb", "bytes": 6752, "halfSize": [1.000001, 0.893807, 0.300887], "vertices": 96, "triangles": 48, "meshes": 4, "materials": 4, "textures": 0, "pixels": 0 },
+    "model-satellite": { "name": "Satélite de laboratório", "file": "satellite.glb", "bytes": 6748, "halfSize": [1.000001, 0.467628, 0.287772], "vertices": 96, "triangles": 48, "meshes": 4, "materials": 4, "textures": 0, "pixels": 0 }
+  }
+}

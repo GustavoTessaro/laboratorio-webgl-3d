@@ -50,6 +50,7 @@ public sealed class RoomStateStore
         lock (_sync)
         {
             var restoredEntities = entities.Select(CanonicalizeEntity).ToArray();
+            ModelCatalog.ValidateBudget(restoredEntities);
             if (restoredEntities.Length > MaximumEntities ||
                 restoredEntities.Select(entity => entity.Id).Distinct(StringComparer.Ordinal).Count() !=
                 restoredEntities.Length)
@@ -156,6 +157,7 @@ public sealed class RoomStateStore
                     throw new InvalidOperationException("O snapshot inicial excede o limite de objetos.");
                 }
 
+                ModelCatalog.ValidateBudget(initialEntities);
                 var initialIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var entity in initialEntities)
                 {
@@ -301,6 +303,7 @@ public sealed class RoomStateStore
             {
                 throw new InvalidOperationException("Já existe um objeto com esse ID.");
             }
+            if (ModelCatalog.Find(entity.Type) is not null) ModelCatalog.ValidateBudget(_entities.Values.Append(entity));
 
             var stored = entity with { LastEditor = _participants[connectionId].Name };
             _entities.Add(stored.Id, stored);
@@ -315,6 +318,8 @@ public sealed class RoomStateStore
         {
             RequireLockOwner(connectionId, entity.Id);
             var committed = _entities[entity.Id];
+            if (committed.Type != entity.Type && (ModelCatalog.Find(committed.Type) is not null || ModelCatalog.Find(entity.Type) is not null))
+                throw new InvalidOperationException("O modelo de uma entidade existente não pode ser trocado.");
             if (!final)
             {
                 if (entity.Trajectory != committed.Trajectory)
@@ -376,6 +381,7 @@ public sealed class RoomStateStore
                 do { id = Guid.NewGuid().ToString(); } while (!ids.Add(id));
                 return CanonicalizeEntity(template with { Id = id, LastEditor = _participants[connectionId].Name });
             }).ToArray();
+            ModelCatalog.ValidateBudget(replace ? objects : _entities.Values.Concat(objects));
             var lighting = replace ? LightingSettings.Default.Settings : _lighting.Settings;
             var effects = replace ? ParticleSettings.Default.Effects : _particles.Effects;
             if (replace && preset.Lighting is not null)
@@ -439,6 +445,8 @@ public sealed class RoomStateStore
         }
 
         var (geometryParameters, halfSize) = GeometryCatalog.Describe(entity.Type, entity.GeometryParameters);
+        if (ModelCatalog.Find(entity.Type) is not null && (entity.MaterialSettings is not null || entity.MaterialMode != "solid"))
+            throw new InvalidOperationException("Modelos de catálogo preservam a aparência original.");
         var material = MaterialSettings.Normalize(entity.MaterialSettings);
         var displacement = ShaderSettings.Displacement(material);
         halfSize.Y += displacement;
@@ -479,7 +487,8 @@ public sealed class RoomStateStore
         var sz = halfSize.Z * entity.Scale.Z;
         var radius = Math.Sqrt(sx * sx + sy * sy + sz * sz);
         var extents = GetWorldExtents(entity.Rotation, entity.Scale, halfSize);
-        var authored = displacement > 0 && entity.Animation.Enabled ? (X: radius, Y: radius, Z: radius) : extents;
+        var authored = (displacement > 0 || ModelCatalog.Find(entity.Type) is not null) && entity.Animation.Enabled
+            ? (X: radius, Y: radius, Z: radius) : extents;
         if (entity.Position.X - authored.X < -WorkspaceLimit - BoundsEpsilon ||
             entity.Position.X + authored.X > WorkspaceLimit + BoundsEpsilon ||
             entity.Position.Y - authored.Y < -BoundsEpsilon ||

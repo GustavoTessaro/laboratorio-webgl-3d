@@ -17,6 +17,7 @@ const MAX_FRAME_DELTA = 0.05;
 
 export function createScene(container, {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }),
+  models,
 } = {}) {
   const document = container.ownerDocument;
   const view = document.defaultView;
@@ -42,7 +43,7 @@ export function createScene(container, {
   const coordinates = createCoordinateHelpers(scene);
 
   const shaderDiagnostics = createShaderDiagnostics(renderer);
-  const entityRegistry = createEntityRegistry(scene, undefined, shaderDiagnostics.failed);
+  const entityRegistry = createEntityRegistry(scene, undefined, shaderDiagnostics.failed, models);
   entityRegistry.createEntity('box', {
     id: '00000000-0000-4000-8000-000000000001',
     name: 'Cubo 1',
@@ -255,11 +256,16 @@ export function createScene(container, {
     camera.updateMatrixWorld();
     raycaster.setFromCamera(normalizedPointer, camera);
     const meshes = entityRegistry.getEntities().map((entity) => entity.mesh);
-    const [intersection] = raycaster.intersectObjects(meshes, false);
+    const [intersection] = raycaster.intersectObjects(meshes, true);
     if (!intersection) return;
 
-    const entity = entityRegistry.getEntity(intersection.object.userData.entityId);
-    if (entity) entityRegistry.selectEntity(entity.id);
+    for (let object = intersection.object; object; object = object.parent) {
+      const entity = entityRegistry.getEntity(object.userData.entityId);
+      if (entity) {
+        entityRegistry.selectEntity(entity.id);
+        break;
+      }
+    }
   }
 
   function handlePointerCancel(event) {
@@ -528,6 +534,10 @@ export function createScene(container, {
 
   return {
     ...entityRegistry,
+    setPrivateModelsVisible(visible) {
+      transformEdit.cancel();
+      return entityRegistry.setPrivateModelsVisible(visible);
+    },
     setSelectionChangeHandler,
     setCollaborationHandlers,
     getSharedEntities: entityRegistry.getSharedEntities,

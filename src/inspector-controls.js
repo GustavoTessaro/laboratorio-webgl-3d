@@ -14,6 +14,8 @@ const geometryLabels = {
   attributes: 'Atributos (componentes × itens)', dimensions: 'Dimensões locais X/Y/Z',
   sphere: 'Raio local da esfera', conservative: 'Caixa conservadora X/Y/Z', texture: 'Textura', animation: 'Animação',
   shader: 'Shader', uniforms: 'Parâmetros e uniforms', deformation: 'Malha deformada',
+  hierarchy: 'Hierarquia',
+  localBox: 'Caixa local (mínimo → máximo)',
 };
 const poseLabels = {
   basePosition: 'Posição base', baseRotation: 'Rotação base (° XYZ)', baseScale: 'Escala base',
@@ -127,12 +129,15 @@ export function bindInspectorControls(root, inspector, signal) {
     const animation = entity?.animation;
     const motion = entity?.trajectoryPreview === undefined ? entity?.trajectoryMotion : entity.trajectoryPreview;
     display(geometry.name, entity?.name);
-    display(geometry.type, facts ? `${geometries[entity.type].name} · ${facts.type}` : null);
-    display(geometry.material, entity?.mesh.material.type);
+    const model = entity?.model;
+    display(geometry.type, facts ? (model ? facts.type : `${geometries[entity.type].name} · ${facts.type}`) : null);
+    display(geometry.hierarchy, model ? `${model.info.meshes} malha(s) · ${model.info.meshNames.slice(0, 6).join(', ')}${model.info.meshes > 6 ? '…' : ''}` : null);
+    display(geometry.material, model ? `${model.info.materials} material(is) original(is)` : entity?.mesh.material.type);
     for (const key of ['vertices', 'unique', 'indices', 'triangles', 'attributes']) display(geometry[key], facts?.[key]);
-    display(geometry.indexed, facts ? (facts.indexed ? 'Indexada' : 'Não indexada') : null);
+    display(geometry.indexed, facts ? (typeof facts.indexed === 'string' ? facts.indexed : facts.indexed ? 'Indexada' : 'Não indexada') : null);
     display(geometry.dimensions, vector(facts?.dimensions));
     display(geometry.sphere, facts?.sphereRadius);
+    display(geometry.localBox, facts?.box ? `${vector(facts.box.min)} → ${vector(facts.box.max)}` : null);
     const halfSize = entity?.geometrySpec.halfSize;
     const displacement = shaderDisplacement(settings);
     display(geometry.conservative, vector(halfSize && { x: halfSize.x, y: halfSize.y + displacement, z: halfSize.z }, 2));
@@ -147,14 +152,15 @@ export function bindInspectorControls(root, inspector, signal) {
       ? 'Vértices, normais, caixa, esfera e seleção usam a malha CPU. O enquadramento inclui a amplitude. Sem sombra projetada durante a deformação.'
       : null);
     const status = entity?.mesh.userData.textureStatus;
-    display(geometry.texture, entity ? (texture ? `${textureCatalog[texture]?.name ?? texture}${status === 'error'
+    display(geometry.texture, model ? `${model.info.textures} textura(s) original(is)` : entity ? (texture ? `${textureCatalog[texture]?.name ?? texture}${status === 'error'
       ? ' (falha de carregamento)' : status === 'loading' ? ' (carregando)' : ''}` : 'Sem textura') : null);
     display(geometry.animation, animation ? (animation.enabled
       ? `${entity.editingTransform ? 'Suspensa pelo gizmo' : 'Ativa'} · ${animation.axis.toUpperCase()} · ${numeric.format(animation.speed)}°/s`
       : 'Rotação desativada') + (motion
         ? ` · Trajetória ${entity.editingTransform || motion.paused ? 'pausada' : 'ativa'}`
         : '') : null);
-    display(sampling, (facts?.vertices ?? 0) > INSPECTOR_SAMPLE_LIMIT
+    display(sampling, model ? 'Os totais somam a hierarquia normalizada. A esfera envolve sua caixa. Vértices únicos e auxiliares por vértice só estão disponíveis nas formas editáveis.' :
+      (facts?.vertices ?? 0) > INSPECTOR_SAMPLE_LIMIT
       ? `Amostragem uniforme de até ${INSPECTOR_SAMPLE_LIMIT} de ${numeric.format(facts.vertices)} vértices e normais.`
       : `Vértices armazenados e suas normais são exibidos até o limite de ${INSPECTOR_SAMPLE_LIMIT} amostras.`);
   }
@@ -180,7 +186,8 @@ export function bindInspectorControls(root, inspector, signal) {
     const { entity, facts, counters, history } = sample;
     empty.hidden = Boolean(entity);
     for (const input of overlays) {
-      input.disabled = !entity || (input.dataset.inspectorOverlay === 'normals' && !entity.mesh.geometry.hasAttribute('normal'));
+      input.disabled = !entity || Boolean(entity.model) ||
+        (input.dataset.inspectorOverlay === 'normals' && !entity.mesh.geometry.hasAttribute('normal'));
     }
     updateGeometry(entity, facts);
     updateTransforms(sample);

@@ -28,9 +28,10 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   const rotationSpeedOutput = root.querySelector('#rotation-speed-value');
   const rotationAxisButtons = root.querySelectorAll('[data-rotation-axis]');
   const resetOrientationButton = root.querySelector('[data-reset-orientation]');
+  const modelAppearance = root.querySelector('[data-model-appearance]');
 
   root.ownerDocument.addEventListener('trajectory-out-of-bounds', () => {
-    const message = 'A transformação faria a trajetória ou a geometria ondulada ultrapassar os limites da cena.';
+    const message = 'A transformação faria a geometria ou a trajetória ultrapassar os limites da cena.';
     trajectoryControls.report(message);
     objectActionMessage.hidden = false;
     objectActionMessage.textContent = message;
@@ -64,7 +65,8 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     }
     sceneControls.setSelectedEntityEditable(!lockedByAnotherParticipant);
     geometryControls.sync(entity, lockedByAnotherParticipant);
-    materialControls.sync(entity, lockedByAnotherParticipant);
+    materialControls.sync(entity?.model ? null : entity, lockedByAnotherParticipant);
+    modelAppearance.hidden = !entity?.model;
     trajectoryControls.sync(entity, lockedByAnotherParticipant);
     const selectionDependentControls = [
       ...colorButtons,
@@ -79,11 +81,15 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     selectionDependentControls.forEach((control) => {
       control.disabled = !hasSelection || lockedByAnotherParticipant;
     });
+    if (entity?.model) {
+      for (const control of [...colorButtons, customColorInput, ...materialButtons, resetAppearanceButton]) control.disabled = true;
+    }
     duplicateObjectButton.disabled = !hasSelection || lockedByAnotherParticipant;
     deleteObjectButton.disabled = !hasSelection || lockedByAnotherParticipant;
-    copyPropertiesButton.disabled = !hasSelection || lockedByAnotherParticipant;
+    copyPropertiesButton.disabled = !hasSelection || lockedByAnotherParticipant || Boolean(entity?.model);
     applyPropertiesButton.disabled = !hasSelection ||
       lockedByAnotherParticipant ||
+      Boolean(entity?.model) ||
       !sceneControls.hasCopiedProperties();
     transformModeButtons.forEach((button) => {
       button.disabled = lockedByAnotherParticipant;
@@ -217,7 +223,10 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
 
   const colorGesture = bindLocalInput(customColorInput, {
     signal,
-    getEntity: sceneControls.getSelectedEntity,
+    getEntity: () => {
+      const entity = sceneControls.getSelectedEntity();
+      return entity?.model ? null : entity;
+    },
     preview: (value, entity) => entity.mesh.material.color.set(value),
     restore: (entity) => {
       entity.mesh.material.color.set(entity.color);

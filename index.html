@@ -223,6 +223,7 @@
 
           <details class="control-category appearance-controls">
             <summary id="appearance-title" class="control-section-title">Aparência</summary>
+            <p class="geometry-description" data-model-appearance hidden>A aparência original do modelo é preservada. Materiais, shaders e cópia de propriedades ficam desabilitados para esta hierarquia.</p>
 
             <label class="geometry-field" for="material-kind">Modelo de material</label>
             <select id="material-kind" class="geometry-select" data-material-property="kind">
@@ -310,6 +311,24 @@
             </button>
           </details>
 
+          <details class="control-category" data-model-import>
+            <summary class="control-section-title">Modelos 3D</summary>
+            <p class="geometry-description">GLB reúne a hierarquia e os recursos em um arquivo binário. O glTF em JSON precisa trazer buffers e imagens em Base64. Arquivos particulares ficam somente no modo local.</p>
+            <p class="geometry-description">Malhas triangulares estáticas, PNG/JPEG incorporados, até 4 MiB por arquivo e até 512 KiB de JSON. Animações internas, recursos separados, URLs externas e extensões não são aceitos.</p>
+            <label class="geometry-field">Importar arquivo particular
+              <input class="geometry-select" type="file" accept=".glb,.gltf" data-model-file />
+            </label>
+            <label class="geometry-field">Exemplos próprios do Laboratório · CC0
+              <select class="geometry-select" data-model-example></select>
+            </label>
+            <div class="environment-actions">
+              <button class="object-action" type="button" data-model-load>Adicionar exemplo</button>
+              <button class="object-action" type="button" data-model-restore hidden>Restaurar particulares</button>
+              <button class="object-action" type="button" data-model-cancel hidden>Cancelar carregamento</button>
+            </div>
+            <p class="geometry-description" role="status" aria-live="polite" data-model-status></p>
+            <p class="geometry-description" data-model-info></p>
+          </details>
           <details class="control-category" data-environments>
             <summary class="control-section-title">Ambientes e demonstrações</summary>
             <label class="geometry-field">Ambiente

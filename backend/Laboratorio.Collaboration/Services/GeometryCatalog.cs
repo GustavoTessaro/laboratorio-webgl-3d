@@ -23,6 +23,11 @@ internal static class GeometryCatalog
     public static (GeometryParametersDto? Overrides, (double X, double Y, double Z) HalfSize) Describe(
         string type, GeometryParametersDto? input)
     {
+        if (ModelCatalog.Find(type) is { } model)
+        {
+            if (input is not null) throw new InvalidOperationException("Modelos de catálogo não aceitam parâmetros de geometria.");
+            return (null, (model.HalfSize[0], model.HalfSize[1], model.HalfSize[2]));
+        }
         if (type is null || !Shapes.TryGetValue(type, out var shape))
             throw new InvalidOperationException("Tipo de geometria inválido.");
         var maxFields = shape.Parameters.Count + (shape.Modeling is null ? 0 : 1 + 2 * shape.Modeling.MaxPoints);

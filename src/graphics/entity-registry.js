@@ -9,6 +9,7 @@ import { createGeometry, describeGeometry, geometries, sameGeometryParameters } 
 import { normalizeTrajectory, sameTrajectory, trajectoryFits } from './trajectory-settings.js';
 import { advanceTrajectory, createTrajectoryMotion, createTrajectoryPose } from './trajectory-motion.js';
 import { materialHalfSize, shaderDisplacement } from './shader-settings.js';
+import { isCatalogModel, modelCatalog, PRIVATE_MODEL, validateModelBudget } from './model-settings.js';
 
 const INITIAL_ROTATION_SPEED = 45;
 const INITIAL_ROTATION_AXIS = 'y';
@@ -18,8 +19,9 @@ const spawnCoordinates = [-3.5, -1.75, 0, 1.75, 3.5]
   .flatMap((z) => [-3.5, -1.75, 0, 1.75, 3.5].map((x) => ({ x, z })))
   .filter(({ x, z }) => x !== 0 || z !== 0);
 
-export function createEntityRegistry(scene, texturePool = createTexturePool(), failedShaders) {
+export function createEntityRegistry(scene, texturePool = createTexturePool(), failedShaders, models) {
   const entities = new Map();
+  const parkedModels = new Map();
   const nameCounters = new Map();
   const entityBounds = new THREE.Box3();
   const entitySize = new THREE.Vector3();
@@ -48,6 +50,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   let onEntityDeleted = () => {};
   let onEntityChanged = () => {};
   let copiedProperties = null;
+  let privateVisible = true;
 
   function serializeEntity(entity, transform = validTransforms.get(entity.id)) {
     return {
@@ -107,7 +110,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     return materialHalfSize(spec.halfSize, effectiveSettings(entity), deformedHalfSize);
   }
 
-  function waveFits(halfSize, pose, animation) {
+  function baseEnvelopeFits(halfSize, pose, animation) {
     if (animation.enabled) {
       const radius = scaledHalfSize.copy(halfSize).multiply(pose.scale).length();
       entityBounds.min.copy(pose.position).addScalar(-radius);
@@ -125,7 +128,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     for (const spec of [entity.geometrySpec, entity.geometryPreview?.spec]) {
       if (!spec) continue;
       const halfSize = materialHalfSize(spec.halfSize, settings, deformedHalfSize);
-      if (!waveFits(halfSize, base, entity.animation) ||
+      if (!baseEnvelopeFits(halfSize, base, entity.animation) ||
           !fitsTrajectory(entity.trajectory, base, halfSize, entity.animation) ||
           !fitsTrajectory(entity.trajectoryPreview?.settings, base, halfSize, entity.animation)) {
         throw new Error('A ondulação, incluindo toda a rotação ou trajetória, ultrapassa os limites da cena. Eleve o objeto ou reduza a amplitude ou a escala.');
@@ -176,7 +179,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       return false;
     }
     mesh.position.add(positionCorrection);
-    if ((displacement && !waveFits(halfSize, mesh, entity.animation)) ||
+    if (((displacement || entity.model) && !baseEnvelopeFits(halfSize, mesh, entity.animation)) ||
         !fitsTrajectory(entity.trajectory, mesh, halfSize, entity.animation)) {
       restoreBase(entity);
       return false;
@@ -297,7 +300,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     }
 
     if (!constrainEntity(entity, remember)) {
-      if (entity.trajectory?.enabled || shaderDisplacement(effectiveSettings(entity))) return false;
+      if (entity.trajectory?.enabled || entity.model || shaderDisplacement(effectiveSettings(entity))) return false;
       mesh.scale.copy(previousScale);
       constrainEntity(entity, remember);
     }
@@ -316,14 +319,24 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   }
 
   function createEntity(type = 'box', position = null) {
-    const geometrySpec = describeGeometry(type, position?.geometryParameters);
+    const privateModel = type === PRIVATE_MODEL;
+    const catalogModel = isCatalogModel(type);
+    if (privateModel && !privateVisible) throw new Error('Arquivos particulares estão disponíveis somente no modo local.');
+    const asset = privateModel ? position?.modelAsset : catalogModel ? models?.get(type) : null;
+    if ((privateModel || catalogModel) && !asset) throw new Error('O modelo 3D ainda não está disponível.');
+    if (asset) {
+      if (entities.size >= 100) throw new Error('Limite de 100 objetos por cena.');
+      validateModelBudget([...getEntities().filter((entity) => entity.model).map((entity) => entity.model.info), asset.info]);
+    }
+    const geometrySpec = asset ? { halfSize: catalogModel ? new THREE.Vector3(...modelCatalog[type].halfSize)
+      : asset.halfSize, overrides: null } : describeGeometry(type, position?.geometryParameters);
 
-    const spawn = position ?? spawnCoordinates[nextSpawnIndex % spawnCoordinates.length];
-    if (!position) nextSpawnIndex += 1;
+    const useSpawn = position?.x === undefined;
+    const spawn = useSpawn ? spawnCoordinates[nextSpawnIndex % spawnCoordinates.length] : position;
+    if (useSpawn) nextSpawnIndex += 1;
     const id = position?.id ?? crypto.randomUUID();
     if (entities.has(id)) throw new Error(`Já existe um objeto com o identificador ${id}.`);
-    const geometry = createGeometry(geometrySpec);
-    const mesh = new THREE.Mesh(geometry, null);
+    const mesh = asset ? asset.instantiate() : new THREE.Mesh(createGeometry(geometrySpec), null);
     mesh.position.set(spawn.x, spawn.y ?? geometrySpec.halfSize.y, spawn.z);
     const requestedScale = position?.scale?.clone() ?? mesh.scale.clone();
     if (position?.rotation) mesh.rotation.copy(position.rotation);
@@ -333,10 +346,12 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
 
     const entity = {
       id,
-      name: position?.name ?? nextEntityName(type),
+      name: position?.name ?? asset?.name ?? nextEntityName(type),
       type,
       geometrySpec,
       mesh,
+      model: asset,
+      privateModel,
       color: position?.color ?? SOLID_MATERIAL.color,
       materialMode: position?.materialMode ?? 'solid',
       rotationPhase: 0,
@@ -348,8 +363,11 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       },
       lastEditor: position?.lastEditor ?? null,
     };
-    entity.materialController = createMaterialController(mesh, texturePool, failedShaders);
-    applyAppearance(entity, entity.color, entity.materialMode, position?.materialSettings);
+    if (asset) entity.materialSettings = null;
+    else {
+      entity.materialController = createMaterialController(mesh, texturePool, failedShaders);
+      applyAppearance(entity, entity.color, entity.materialMode, position?.materialSettings);
+    }
 
     entities.set(id, entity);
     mesh.userData.entityId = id;
@@ -362,7 +380,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     applyVisualPose(entity);
     selectedEntityId = id;
     onSelectionChange(entity);
-    onEntityCreated(serializeEntity(entity));
+    if (!entity.privateModel) onEntityCreated(serializeEntity(entity));
     return entity;
   }
 
@@ -405,7 +423,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
           z: base.position.z + offsetZ,
         };
         const candidate = { ...base, position: new THREE.Vector3(position.x, position.y, position.z) };
-        if ((!shaderDisplacement(entity.materialSettings) || waveFits(halfSize, candidate, entity.animation)) &&
+        if ((!(entity.model || shaderDisplacement(entity.materialSettings)) || baseEnvelopeFits(halfSize, candidate, entity.animation)) &&
             fitsTrajectory(entity.trajectory, candidate, halfSize, entity.animation)) return position;
       }
     }
@@ -429,12 +447,13 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       materialSettings: source.materialSettings,
       animation: { ...source.animation },
       trajectory: source.trajectory,
+      modelAsset: source.model,
     });
   }
 
   function copyEntityProperties(id) {
     const entity = getEntity(id);
-    if (!entity) return false;
+    if (!entity || entity.model) return false;
 
     copiedProperties = {
       color: entity.color,
@@ -449,7 +468,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
 
   function applyCopiedProperties(id) {
     const entity = getEntity(id);
-    if (!entity || !copiedProperties) return false;
+    if (!entity || entity.model || !copiedProperties) return false;
 
     const base = validTransforms.get(id);
     const copiedWave = shaderDisplacement(copiedProperties.materialSettings);
@@ -459,7 +478,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       baseMatrix.compose(base.position, baseQuaternion.setFromEuler(base.rotation), candidate.scale);
       measureBounds(halfSize, baseMatrix);
       if (!getPositionCorrection() || positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2 ||
-          (copiedWave && !waveFits(halfSize, candidate, copiedProperties.animation)) ||
+          (copiedWave && !baseEnvelopeFits(halfSize, candidate, copiedProperties.animation)) ||
           !fitsTrajectory(copiedProperties.trajectory, candidate, halfSize, copiedProperties.animation)) return false;
     }
     cancelTrajectoryPreview(entity);
@@ -515,10 +534,13 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     return entity;
   }
 
-  function releaseMesh({ mesh, materialController }) {
+  function releaseMesh({ mesh, materialController, model }) {
     scene.remove(mesh);
-    mesh.geometry.dispose();
-    materialController.dispose();
+    if (model) model.release();
+    else {
+      mesh.geometry.dispose();
+      materialController.dispose();
+    }
   }
 
   function removeEntity(id) {
@@ -529,7 +551,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     releaseMesh(entity);
     entities.delete(id);
     validTransforms.delete(id);
-    onEntityDeleted(id);
+    if (!entity.privateModel) onEntityDeleted(id);
 
     if (selectedEntityId === id) {
       selectedEntityId = entities.keys().next().value ?? null;
@@ -548,6 +570,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   }
 
   function setGeometry(entity, type, parameters, previewOnly = false) {
+    if (entity.model) return false;
     if (entity.editingTransform) throw new Error('Conclua a transformação antes de editar a geometria.');
     const spec = describeGeometry(type, parameters);
     const committed = entity.geometrySpec;
@@ -569,7 +592,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       throw new Error('A geometria ultrapassaria os limites da cena na posição base da trajetória.');
     }
     const correctedPosition = previewOnly || activeTrajectory ? base.position : base.position.clone().add(positionCorrection);
-    if (wave && !waveFits(halfSize, base, entity.animation)) throw new Error('A geometria ondulada ultrapassa os limites da cena.');
+    if (wave && !baseEnvelopeFits(halfSize, base, entity.animation)) throw new Error('A geometria ondulada ultrapassa os limites da cena.');
     requireTrajectoryFit(entity.trajectory, base, halfSize, entity.animation, correctedPosition);
     if (entity.trajectoryPreview?.settings) {
       requireTrajectoryFit(entity.trajectoryPreview.settings, base, halfSize, entity.animation, correctedPosition);
@@ -625,7 +648,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
 
   function updateAnimations(delta) {
     for (const entity of entities.values()) {
-      entity.materialController.updateTime(delta);
+      entity.materialController?.updateTime(delta);
       if (entity.editingTransform) continue;
       const motion = entity.trajectoryPreview === undefined ? entity.trajectoryMotion : entity.trajectoryPreview;
       if (!entity.animation.enabled && !motion) continue;
@@ -651,6 +674,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   }
 
   function setAppearance(entity, color, materialMode = entity.materialMode, settings = entity.materialSettings) {
+    if (entity.model) return false;
     ensureShaderFit(entity, normalizeMaterialSettings(settings));
     if (!applyAppearance(entity, color, materialMode, settings)) return false;
     onEntityChanged(serializeEntity(entity));
@@ -658,6 +682,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   }
 
   function setMaterialSettings(entity, settings, preview = false) {
+    if (entity.model) return;
     if (preview) {
       const next = normalizeMaterialSettings(settings);
       ensureShaderFit(entity, next);
@@ -678,10 +703,10 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     const animation = { ...entity.animation, ...changes };
     if (Object.keys(changes).every((key) => animation[key] === entity.animation[key])) return;
     const base = validTransforms.get(entity.id);
-    if (shaderDisplacement(effectiveSettings(entity)) &&
-        (!waveFits(halfSizeFor(entity), base, animation) ||
-        !waveFits(halfSizeFor(entity, entity.geometryPreview?.spec ?? entity.geometrySpec), base, animation))) {
-      throw new Error('A rotação da geometria ondulada ultrapassa os limites da cena.');
+    if ((entity.model || shaderDisplacement(effectiveSettings(entity))) &&
+        (!baseEnvelopeFits(halfSizeFor(entity), base, animation) ||
+        !baseEnvelopeFits(halfSizeFor(entity, entity.geometryPreview?.spec ?? entity.geometrySpec), base, animation))) {
+      throw new Error('A rotação completa ultrapassa os limites da cena. Eleve o objeto ou reduza a escala.');
     }
     requireTrajectoryFit(entity.trajectory, base, halfSizeFor(entity), animation);
     if (entity.geometryPreview) {
@@ -701,16 +726,18 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   function setMutationHandlers(handlers = {}) {
     onEntityCreated = handlers.onCreated ?? (() => {});
     onEntityDeleted = handlers.onDeleted ?? (() => {});
-    onEntityChanged = handlers.onChanged ?? (() => {});
+    onEntityChanged = (snapshot) => {
+      if (snapshot.type !== PRIVATE_MODEL) handlers.onChanged?.(snapshot);
+    };
   }
 
   function clearEntities() {
     for (const entity of entities.values()) {
       cancelGeometryPreview(entity);
       releaseMesh(entity);
+      validTransforms.delete(entity.id);
     }
     entities.clear();
-    validTransforms.clear();
     selectedEntityId = null;
   }
 
@@ -767,7 +794,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       if (entity.trajectory?.enabled && !trajectory?.enabled) entity.rotationPhase = 0;
       cancelGeometryPreview(entity);
       const typeChanged = entity.type !== snapshot.type;
-      const spec = describeGeometry(snapshot.type, snapshot.geometryParameters);
+      const spec = entity.model ? entity.geometrySpec : describeGeometry(snapshot.type, snapshot.geometryParameters);
       const geometryChanged = typeChanged ||
         !sameGeometryParameters(entity.geometrySpec.overrides, spec.overrides);
       const transformChanged = ['position', 'rotation', 'scale'].some((key) =>
@@ -784,7 +811,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       }
       entity.type = snapshot.type;
       entity.name = snapshot.name;
-      applyAppearance(entity, snapshot.color, snapshot.materialMode, snapshot.materialSettings);
+      if (!entity.model) applyAppearance(entity, snapshot.color, snapshot.materialMode, snapshot.materialSettings);
       entity.animation = { ...snapshot.animation };
       entity.trajectory = trajectory;
       if (trajectoryChanged) entity.trajectoryMotion = trajectory?.enabled ? createTrajectoryMotion(trajectory) : null;
@@ -816,7 +843,36 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   }
 
   function getSharedEntities() {
-    return Array.from(entities.values(), (entity) => serializeEntity(entity));
+    return getEntities().filter((entity) => !entity.privateModel).map((entity) => serializeEntity(entity));
+  }
+
+  function setPrivateModelsVisible(visible) {
+    if (privateVisible === visible && !visible) return parkedModels.size;
+    privateVisible = visible;
+    if (!visible) {
+      for (const [id, entity] of entities) {
+        if (!entity.privateModel) continue;
+        scene.remove(entity.mesh);
+        entities.delete(id);
+        parkedModels.set(id, entity);
+      }
+      if (!entities.has(selectedEntityId)) selectedEntityId = entities.keys().next().value ?? null;
+    } else {
+      for (const [id, entity] of parkedModels) {
+        if (entities.size >= 100) break;
+        try {
+          validateModelBudget([...getEntities().filter((item) => item.model).map((item) => item.model.info), entity.model.info]);
+        } catch {
+          continue;
+        }
+        entities.set(id, entity);
+        scene.add(entity.mesh);
+        selectedEntityId ??= id;
+        parkedModels.delete(id);
+      }
+    }
+    onSelectionChange(getSelectedEntity());
+    return parkedModels.size;
   }
 
   function applyEntityBatch(snapshots, replace) {
@@ -859,6 +915,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     getEntity,
     getEntities,
     count: () => entities.size,
+    setPrivateModelsVisible,
     applyEntityBatch,
     readBaseTransform(id, target) {
       const transform = validTransforms.get(id);
@@ -880,9 +937,9 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     restoreBase,
     updateAnimations,
     refreshShaderFallbacks() {
-      for (const entity of entities.values()) entity.materialController.refreshFallback();
+      for (const entity of entities.values()) entity.materialController?.refreshFallback();
     },
-    requiresStrictBounds: (entity) => Boolean(entity.trajectory?.enabled || shaderDisplacement(effectiveSettings(entity))),
+    requiresStrictBounds: (entity) => Boolean(entity.trajectory?.enabled || entity.model || shaderDisplacement(effectiveSettings(entity))),
     setAppearance,
     setMaterialSettings,
     cancelMaterialPreview,
@@ -900,6 +957,9 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       setMutationHandlers();
       onSelectionChange = () => {};
       clearEntities();
+      for (const entity of parkedModels.values()) releaseMesh(entity);
+      parkedModels.clear();
+      validTransforms.clear();
       copiedProperties = null;
       nameCounters.clear();
     },

@@ -82,13 +82,13 @@ export function createGraphicsInspector(scene, {
     setSampleHandler(handler = () => {}) { onSample = handler; },
     beforeRender(selected) {
       entity = selected;
-      helpers.update(selected?.mesh);
+      helpers.update(selected?.model ? null : selected?.mesh);
     },
     afterRender(camera) {
       if (!open || !history.record(now())) return;
       const authored = entity && readBaseTransform(entity.id, base);
       sample.entity = entity ?? null;
-      sample.facts = entity ? inspectGeometry(entity.mesh.geometry) : null;
+      sample.facts = entity?.model?.facts ?? (entity ? inspectGeometry(entity.mesh.geometry) : null);
       sample.base = authored ? base : null;
       sample.baseMatrix = authored ? baseMatrix.compose(base.position, quaternion.setFromEuler(base.rotation), base.scale) : null;
       sample.camera = camera;

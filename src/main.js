@@ -14,6 +14,9 @@ import { bindEnvironmentControls } from './environment-controls.js';
 import { ENVIRONMENT_VERSION, prepareEnvironment } from './graphics/environment-presets.js';
 import { sameTrajectory } from './graphics/trajectory-settings.js';
 import { changeParticles, EMPTY_PARTICLES, sameParticleSettings } from './graphics/particle-settings.js';
+import { createModelLibrary } from './graphics/model-assets.js';
+import { isCatalogModel, modelCatalog, PRIVATE_MODEL } from './graphics/model-settings.js';
+import { bindModelControls } from './model-controls.js';
 
 const container = document.querySelector('#scene-container');
 const message = document.querySelector('#webgl-message');
@@ -44,7 +47,8 @@ const { signal } = pageLifetime;
 let disposePage;
 
 try {
-  const sceneControls = createScene(container);
+  const modelLibrary = createModelLibrary();
+  const sceneControls = createScene(container, { models: modelLibrary });
   disposePage = sceneControls.dispose;
   const serverEntities = new Map();
   const participants = new Map();
@@ -103,6 +107,10 @@ try {
   const particleControls = bindParticleControls(
     document.querySelector('.particle-controls'), particleSession, sceneControls.particles, signal,
   );
+  const allowsPrivate = () => !connectionAttemptInProgress && !collaborationConnected && !lightingSession.shared;
+  const modelControls = bindModelControls(document.querySelector('[data-model-import]'), {
+    scene: sceneControls, library: modelLibrary, allowsPrivate,
+  }, signal);
   bindInspectorControls(document.querySelector('[data-graphics-inspector]'), sceneControls.inspector, signal);
   bindEnvironmentControls(document.querySelector('[data-environments]'), {
     load: loadEnvironment,
@@ -116,6 +124,7 @@ try {
   function applyEnvironmentChange(change, shared) {
     const replace = change.mode === 'replace';
     if (replace) {
+      modelControls.cancel('Carregamento cancelado pela troca de cena.');
       cancelLocalInputs();
       lightingControls.cancel();
       particleControls.cancel();
@@ -147,7 +156,7 @@ try {
     }
     if (!client?.connected) {
       const change = prepareEnvironment(preset.id, mode, {
-        entities: sceneControls.getSharedEntities(),
+        entities: sceneControls.getEntities(),
         lighting: lightingSession.confirmed,
         particles: particleSession.confirmed,
       });
@@ -187,6 +196,7 @@ try {
     particleSession.leave();
     panel.dispose();
     sceneControls.dispose();
+    modelLibrary.dispose();
     void collaborationClient?.stop().catch(console.warn);
   };
 
@@ -345,6 +355,9 @@ try {
   }
 
   function enqueueOperation(operation) {
+    if (operation.entity?.type === PRIVATE_MODEL || sceneControls.getEntity(operation.id)?.privateModel) {
+      return Promise.resolve();
+    }
     if (operation.kind === 'update' && operation.final) {
       operation.expected = serverEntities.get(operation.entity.id);
     }
@@ -355,6 +368,12 @@ try {
     const task = operationQueue.then(() => processOperation(operation));
     operationQueue = task.catch((error) => {
       if (operation.final === false) return;
+      if (operation.kind === 'create' && isCatalogModel(operation.entity.type) &&
+          collaborationClient?.connected && error.message.includes('Modelo rejeitado.')) {
+        sceneControls.removeSharedEntity(operation.entity.id);
+        showCollaborationMessage(error.message);
+        return;
+      }
       if (!collaborationClient?.connected || operation.kind !== 'update') {
         pendingOperations.push(operation);
         showCollaborationMessage(`Alteração mantida localmente e aguardando envio: ${error.message}`);
@@ -406,6 +425,7 @@ try {
     if (snapshot.protocolVersion !== COLLABORATION_PROTOCOL_VERSION) {
       throw new Error('A sala usa uma versão de protocolo incompatível.');
     }
+    modelControls.cancel('Carregamento cancelado pela sincronização da cena.');
     cancelLocalInputs();
     serverEntities.clear();
     for (const entity of snapshot.entities) serverEntities.set(entity.id, entity);
@@ -502,6 +522,7 @@ try {
     onEntityDeleted: (id) => enqueueOperation({ kind: 'delete', id }),
     onEntityChanged: (entity, { continuous }) => publishEntity(entity, continuous),
     onEditStateChange: (entityId, editing, finalEntity) => {
+      if (sceneControls.getEntity(entityId)?.privateModel) return;
       if (editing) {
         const edit = {};
         activeEdits.set(entityId, edit);
@@ -542,6 +563,7 @@ try {
   sceneControls.setSelectionChangeHandler(() => {
     renderEntityList();
     syncSelectedEntity();
+    modelControls.sync(sceneControls.getSelectedEntity());
   });
 
   collaborationOpenButton.addEventListener('click', () => {
@@ -557,6 +579,7 @@ try {
     lightingSession.leave();
     particleSession.leave();
     setCollaborationStatus('disconnected', 'Colaboração desconectada · modo local');
+    modelControls.setParked(sceneControls.setPrivateModelsVisible(true));
     if (collaborationClient) {
       void collaborationClient.stop().catch((error) => {
         showCollaborationMessage(`Não foi possível encerrar a conexão: ${error.message}`);
@@ -576,10 +599,14 @@ try {
     }
 
     connectionAttemptInProgress = true;
+    modelControls.cancel('Carregamento cancelado ao conectar à sala.');
+    modelControls.setParked(sceneControls.setPrivateModelsVisible(false));
     const attemptId = ++connectionAttemptId;
     setCollaborationStatus('connecting', 'Conectando à sala...');
     showCollaborationMessage('');
     try {
+      await Promise.all(Object.keys(modelCatalog).map((type) => modelLibrary.load(type)));
+      if (attemptId !== connectionAttemptId || signal.aborted) return;
       const client = createCollaborationClient();
       await client.connect(displayName, sceneControls.getSharedEntities());
       if (attemptId !== connectionAttemptId) return;
@@ -597,6 +624,8 @@ try {
     } finally {
       if (attemptId === connectionAttemptId) {
         connectionAttemptInProgress = false;
+        if (allowsPrivate()) modelControls.setParked(sceneControls.setPrivateModelsVisible(true));
+        else modelControls.sync();
         if (collaborationClient?.connected) {
           setCollaborationStatus(
             'connected',

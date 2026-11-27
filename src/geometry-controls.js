@@ -73,6 +73,8 @@ export function bindGeometryControls(root, scene, signal) {
   }
 
   function sync(entity, locked) {
+    const imported = Boolean(entity?.model);
+    if (imported) entity = null;
     const disabled = !entity || locked;
     shape.disabled = reset.disabled = disabled;
     shape.value = entity?.type ?? '';
@@ -88,6 +90,7 @@ export function bindGeometryControls(root, scene, signal) {
       report();
       if (entity) renderFields(entity);
     }
+    if (imported) report('A geometria original do modelo é preservada. Ajuste a escala no gizmo.');
     modelingControls?.sync(disabled);
     for (const { key, input, output, gesture, label } of controls) {
       input.disabled = disabled;
