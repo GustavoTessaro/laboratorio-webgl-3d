@@ -1,10 +1,12 @@
 import { bindLocalInput } from './edit-gestures.js';
 import { bindGeometryControls } from './geometry-controls.js';
+import { bindMaterialControls } from './material-controls.js';
 
 export function createControlsPanel(root, sceneControls, { getLock, isLocked, onDelete }) {
   const lifetime = new AbortController();
   const { signal } = lifetime;
   const geometryControls = bindGeometryControls(root, sceneControls, signal);
+  const materialControls = bindMaterialControls(root, sceneControls, signal, syncSelectedEntity);
   const sceneObjectList = root.querySelector('#scene-object-list');
   const duplicateObjectButton = root.querySelector('[data-duplicate-object]');
   const deleteObjectButton = root.querySelector('[data-delete-object]');
@@ -63,6 +65,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     }
     sceneControls.setSelectedEntityEditable(!lockedByAnotherParticipant);
     geometryControls.sync(entity, lockedByAnotherParticipant);
+    materialControls.sync(entity, lockedByAnotherParticipant);
     const selectionDependentControls = [
       ...colorButtons,
       customColorInput,
@@ -299,6 +302,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
 
   function cancelLocalInputs(entityId) {
     geometryControls.cancel(entityId);
+    materialControls.cancel(entityId);
     for (const input of localInputs) {
       if (entityId === undefined || input.entity?.id === entityId) input.cancel();
     }

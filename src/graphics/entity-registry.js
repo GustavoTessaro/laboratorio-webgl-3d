@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import {
-  BOUNDS_EPSILON, SOLID_MATERIAL, WORKSPACE_HEIGHT, WORKSPACE_LIMIT, WORKSPACE_SIZE,
-  createObjectMaterial,
+  BOUNDS_EPSILON, WORKSPACE_HEIGHT, WORKSPACE_LIMIT, WORKSPACE_SIZE,
 } from './scene-assets.js';
+import {
+  createMaterialController, createTexturePool, normalizeMaterialSettings, sameMaterialSettings, SOLID_MATERIAL,
+} from './object-materials.js';
 import { createGeometry, describeGeometry, geometries, sameGeometryParameters } from './geometries.js';
 
 const INITIAL_ROTATION_SPEED = 45;
@@ -13,7 +15,7 @@ const spawnCoordinates = [-3.5, -1.75, 0, 1.75, 3.5]
   .flatMap((z) => [-3.5, -1.75, 0, 1.75, 3.5].map((x) => ({ x, z })))
   .filter(({ x, z }) => x !== 0 || z !== 0);
 
-export function createEntityRegistry(scene) {
+export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   const entities = new Map();
   const nameCounters = new Map();
   const entityBounds = new THREE.Box3();
@@ -46,6 +48,7 @@ export function createEntityRegistry(scene) {
       geometryParameters: entity.geometrySpec.overrides ? { ...entity.geometrySpec.overrides } : null,
       color: entity.color,
       materialMode: entity.materialMode,
+      materialSettings: sameMaterialSettings(entity.materialSettings, null) ? null : { ...entity.materialSettings },
       position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
       rotation: { x: transform.rotation.x, y: transform.rotation.y, z: transform.rotation.z },
       scale: { x: transform.scale.x, y: transform.scale.y, z: transform.scale.z },
@@ -219,8 +222,7 @@ export function createEntityRegistry(scene) {
     const id = position?.id ?? crypto.randomUUID();
     if (entities.has(id)) throw new Error(`Já existe um objeto com o identificador ${id}.`);
     const geometry = createGeometry(geometrySpec);
-    const material = createObjectMaterial();
-    const mesh = new THREE.Mesh(geometry, material);
+    const mesh = new THREE.Mesh(geometry, null);
     mesh.position.set(spawn.x, spawn.y ?? geometrySpec.halfSize.y, spawn.z);
     const requestedScale = position?.scale?.clone() ?? mesh.scale.clone();
     if (position?.rotation) mesh.rotation.copy(position.rotation);
@@ -244,8 +246,8 @@ export function createEntityRegistry(scene) {
       },
       lastEditor: position?.lastEditor ?? null,
     };
-    material.color.set(entity.color);
-    material.wireframe = entity.materialMode === 'wireframe';
+    entity.materialController = createMaterialController(mesh, texturePool);
+    applyAppearance(entity, entity.color, entity.materialMode, position?.materialSettings);
 
     entities.set(id, entity);
     mesh.userData.entityId = id;
@@ -314,6 +316,7 @@ export function createEntityRegistry(scene) {
       geometryParameters: source.geometrySpec.overrides,
       color: source.color,
       materialMode: source.materialMode,
+      materialSettings: source.materialSettings,
       animation: { ...source.animation },
     });
   }
@@ -325,6 +328,7 @@ export function createEntityRegistry(scene) {
     copiedProperties = {
       color: entity.color,
       materialMode: entity.materialMode,
+      materialSettings: { ...entity.materialSettings },
       scale: validTransforms.get(id).scale.clone(),
       animation: { ...entity.animation },
     };
@@ -336,11 +340,7 @@ export function createEntityRegistry(scene) {
     if (!entity || !copiedProperties) return false;
 
     restoreBase(entity);
-    entity.color = copiedProperties.color;
-    entity.materialMode = copiedProperties.materialMode;
-    entity.mesh.material.color.set(copiedProperties.color);
-    entity.mesh.material.wireframe = copiedProperties.materialMode === 'wireframe';
-    entity.mesh.material.needsUpdate = true;
+    applyAppearance(entity, copiedProperties.color, copiedProperties.materialMode, copiedProperties.materialSettings);
     entity.mesh.scale.set(
       copiedProperties.scale.x,
       copiedProperties.scale.y,
@@ -387,10 +387,10 @@ export function createEntityRegistry(scene) {
     return entity;
   }
 
-  function releaseMesh({ mesh }) {
+  function releaseMesh({ mesh, materialController }) {
     scene.remove(mesh);
     mesh.geometry.dispose();
-    mesh.material.dispose();
+    materialController.dispose();
   }
 
   function removeEntity(id) {
@@ -488,16 +488,29 @@ export function createEntityRegistry(scene) {
     }
   }
 
-  function setAppearance(entity, color, materialMode = entity.materialMode) {
-    entity.mesh.material.color.set(color);
-    if (entity.materialMode !== materialMode) {
-      entity.mesh.material.wireframe = materialMode === 'wireframe';
-      entity.mesh.material.needsUpdate = true;
-    }
-    if (color === entity.color && materialMode === entity.materialMode) return;
+  function applyAppearance(entity, color, materialMode, input) {
+    const settings = normalizeMaterialSettings(input);
+    entity.materialController.apply(color, materialMode, settings);
+    const changed = color !== entity.color || materialMode !== entity.materialMode ||
+      !sameMaterialSettings(settings, entity.materialSettings);
     entity.color = color;
     entity.materialMode = materialMode;
+    entity.materialSettings = settings;
+    return changed;
+  }
+
+  function setAppearance(entity, color, materialMode = entity.materialMode, settings = entity.materialSettings) {
+    if (!applyAppearance(entity, color, materialMode, settings)) return false;
     onEntityChanged(serializeEntity(entity));
+    return true;
+  }
+
+  function setMaterialSettings(entity, settings, preview = false) {
+    if (preview) {
+      entity.materialController.apply(entity.color, entity.materialMode, normalizeMaterialSettings(settings));
+    } else {
+      setAppearance(entity, entity.color, entity.materialMode, settings);
+    }
   }
 
   function setAnimation(entity, changes) {
@@ -540,6 +553,7 @@ export function createEntityRegistry(scene) {
         rotation: new THREE.Euler(snapshot.rotation.x, snapshot.rotation.y, snapshot.rotation.z),
         color: snapshot.color,
         materialMode: snapshot.materialMode,
+        materialSettings: snapshot.materialSettings,
         animation: snapshot.animation,
         geometryParameters: snapshot.geometryParameters,
       });
@@ -563,6 +577,7 @@ export function createEntityRegistry(scene) {
         rotation: new THREE.Euler(snapshot.rotation.x, snapshot.rotation.y, snapshot.rotation.z),
         color: snapshot.color,
         materialMode: snapshot.materialMode,
+        materialSettings: snapshot.materialSettings,
         animation: snapshot.animation,
         geometryParameters: snapshot.geometryParameters,
         lastEditor: snapshot.lastEditor,
@@ -589,14 +604,7 @@ export function createEntityRegistry(scene) {
       }
       entity.type = snapshot.type;
       entity.name = snapshot.name;
-      entity.color = snapshot.color;
-      entity.materialMode = snapshot.materialMode;
-      entity.mesh.material.color.set(snapshot.color);
-      const wireframe = snapshot.materialMode === 'wireframe';
-      if (entity.mesh.material.wireframe !== wireframe) {
-        entity.mesh.material.wireframe = wireframe;
-        entity.mesh.material.needsUpdate = true;
-      }
+      applyAppearance(entity, snapshot.color, snapshot.materialMode, snapshot.materialSettings);
       entity.animation = { ...snapshot.animation };
       entity.lastEditor = snapshot.lastEditor ?? null;
       if (restart) {
@@ -651,6 +659,7 @@ export function createEntityRegistry(scene) {
     restoreBase,
     updateAnimations,
     setAppearance,
+    setMaterialSettings,
     setAnimation,
     setMutationHandlers,
     serializeEntity: (id, pose) => {

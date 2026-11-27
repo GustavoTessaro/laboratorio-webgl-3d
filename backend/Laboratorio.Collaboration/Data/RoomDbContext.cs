@@ -28,6 +28,7 @@ public sealed class RoomDbContext(DbContextOptions<RoomDbContext> options) : DbC
             entity.Property(item => item.GeometryParametersJson).HasMaxLength(1024);
             entity.Property(item => item.Color).HasMaxLength(7).IsRequired();
             entity.Property(item => item.MaterialMode).HasMaxLength(16).IsRequired();
+            entity.Property(item => item.MaterialSettingsJson).HasMaxLength(1024);
             entity.Property(item => item.AnimationAxis).HasMaxLength(1).IsRequired();
             entity.Property(item => item.LastEditor).HasMaxLength(32);
             entity.HasOne<RoomRecord>()
@@ -53,6 +54,7 @@ public sealed class RoomEntityRecord
     public string? GeometryParametersJson { get; set; }
     public string Color { get; set; } = string.Empty;
     public string MaterialMode { get; set; } = string.Empty;
+    public string? MaterialSettingsJson { get; set; }
     public double PositionX { get; set; }
     public double PositionY { get; set; }
     public double PositionZ { get; set; }

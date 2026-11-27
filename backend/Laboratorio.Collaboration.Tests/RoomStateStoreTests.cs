@@ -200,6 +200,39 @@ public sealed class RoomStateStoreTests
         Assert.Throws<InvalidOperationException>(() => store.Join("legacy", "Cliente V1", 1, []));
     }
 
+    [Fact]
+    public void ValidatesMaterialValuesAndOnlyAcceptsCatalogTextureIds()
+    {
+        var box = CreateBox();
+        foreach (var id in new[] { "wood", "brick", "marble", "stone", "metal", "concrete", "fabric", "uv-grid" })
+            RoomStateStore.ValidateEntity(box with { MaterialSettings = new MaterialSettingsDto(TextureId: id) });
+
+        foreach (var settings in new[]
+        {
+            new MaterialSettingsDto(Kind: "shader"),
+            new MaterialSettingsDto(Side: "unknown"),
+            new MaterialSettingsDto(TextureId: "https://example.com/foreign.jpg"),
+            new MaterialSettingsDto(Opacity: 1.1),
+            new MaterialSettingsDto(Roughness: double.NaN),
+            new MaterialSettingsDto(Metalness: -0.1),
+            new MaterialSettingsDto(Shininess: 201),
+            new MaterialSettingsDto(Specular: "#fff"),
+            new MaterialSettingsDto(Emissive: "#112233\n"),
+            new MaterialSettingsDto(EmissiveIntensity: 5.5),
+            new MaterialSettingsDto(RepeatV: 0),
+            new MaterialSettingsDto(OffsetU: 1.01),
+            new MaterialSettingsDto(TextureRotation: -181),
+        })
+            Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(box with { MaterialSettings = settings }));
+
+        var store = new RoomStateStore();
+        Assert.Throws<InvalidOperationException>(() => store.Join("v2", "Cliente V2", 2, []));
+        var joined = store.Join("ana", "Ana", CollaborationProtocol.Version, [
+            box with { MaterialSettings = new MaterialSettingsDto() }
+        ]);
+        Assert.Null(Assert.Single(joined.Entities).MaterialSettings);
+    }
+
     private sealed class TestTimeProvider : TimeProvider
     {
         private DateTimeOffset _now = DateTimeOffset.UtcNow;

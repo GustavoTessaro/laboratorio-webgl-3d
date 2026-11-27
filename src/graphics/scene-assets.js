@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 
-export const SOLID_MATERIAL = { color: '#6c8cff', wireframe: false };
 const INITIAL_LIGHTING = {
   ambientIntensity: 2,
   directionalIntensity: 3,
@@ -11,14 +10,6 @@ export const WORKSPACE_LIMIT = 10;
 export const WORKSPACE_SIZE = WORKSPACE_LIMIT * 2;
 export const WORKSPACE_HEIGHT = 10;
 export const BOUNDS_EPSILON = 1e-6;
-
-export function createObjectMaterial() {
-  return new THREE.MeshStandardMaterial({
-    ...SOLID_MATERIAL,
-    roughness: 0.38,
-    metalness: 0.12,
-  });
-}
 
 export function createLighting(scene) {
   const ambientLight = new THREE.HemisphereLight(

@@ -698,6 +698,78 @@ h1 {
   margin: 8px 0;
 }
 
+.appearance-controls > .color-presets {
+  margin-top: 12px;
+}
+
+.appearance-group {
+  min-inline-size: 0;
+  margin: 16px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.appearance-group legend {
+  color: #c7cedb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.appearance-controls [hidden] {
+  display: none;
+}
+
+.material-field {
+  margin-top: 10px;
+}
+
+.material-field select {
+  margin-top: 4px;
+}
+
+.texture-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.texture-option {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #191e28;
+  color: #c7cedb;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.texture-option img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.texture-option[aria-pressed='true'] {
+  border-color: #7088e6;
+  background: #293456;
+}
+
+.texture-option:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.texture-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 [data-geometry-fields] {
   margin-bottom: 12px;
 }

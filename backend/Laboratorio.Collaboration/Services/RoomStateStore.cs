@@ -315,7 +315,7 @@ public sealed class RoomStateStore
         }
     }
 
-    public static void ValidateEntity(EntityDto entity) => ValidateAndNormalizeGeometry(entity);
+    public static void ValidateEntity(EntityDto entity) => CanonicalizeEntity(entity);
 
     private static GeometryParametersDto? ValidateAndNormalizeGeometry(EntityDto entity)
     {
@@ -426,7 +426,12 @@ public sealed class RoomStateStore
     private static EntityDto CanonicalizeEntity(EntityDto entity)
     {
         var geometry = ValidateAndNormalizeGeometry(entity);
-        return entity with { Id = Guid.Parse(entity.Id).ToString(), GeometryParameters = geometry };
+        return entity with
+        {
+            Id = Guid.Parse(entity.Id).ToString(),
+            GeometryParameters = geometry,
+            MaterialSettings = MaterialSettings.Normalize(entity.MaterialSettings)
+        };
     }
 
     private void RequireParticipant(string connectionId)

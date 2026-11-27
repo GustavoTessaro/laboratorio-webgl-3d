@@ -47,6 +47,9 @@ namespace Laboratorio.Collaboration.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(16);
 
+                    b.Property<string>("MaterialSettingsJson")
+                        .HasMaxLength(1024);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64);

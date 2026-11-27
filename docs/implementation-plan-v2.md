@@ -39,6 +39,7 @@
 - [ ] V2-02 verificada com gizmo, bloqueio, cancelamento, reconexão e contagem de gravações.
 - [x] V2-03 implementada e validada nas suítes automatizadas e no Chrome headless em modo local.
 - [x] V2-04 implementada e validada com WebGL, SignalR local e migração SQLite.
+- [x] V2-05 implementada e validada com WebGL, SignalR local e recuperação após reinício com SQLite.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
 - [ ] Pelo menos um recurso avançado demonstrável em V2-08 ou V2-10.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
@@ -93,3 +94,26 @@ O protocolo passa para a versão 2 porque clientes antigos não conseguem render
 - [x] Script idempotente SQL Server gerado e revisado sem conexão com o banco. O script acrescenta a coluna anulável e registra a migração no histórico.
 - [x] Chrome headless com WebGL em modo local e sessões colaborativas em localhost. Verificados seleção e criação das treze formas, campos do nó toroidal, prévia visível só no autor, confirmação compartilhada, duplicação, restauração dos padrões e hidratação em nova sessão.
 - [ ] Ensaiar publicação coordenada e retorno em ambiente de teste com SQL Server e conferir interação por toque e teclado em dispositivos reais. As pendências anteriores de alta latência continuam abertas.
+
+## Registro da V2-05
+
+A categoria Aparência oferece Basic, Phong e Standard PBR. Standard conserva os valores da V1, com rugosidade 0,38 e metalicidade 0,12. A troca de modelo mantém as propriedades comuns e guarda os ajustes específicos para quando seu modelo voltar a ser usado. A opacidade abaixo de 1 habilita a transparência automaticamente. Os controles de mapeamento aparecem quando há textura. A restauração do mapeamento preserva a imagem, e a restauração de aparência volta ao Standard e remove o mapa.
+
+O catálogo reúne sete mapas de cor do ambientCG sob CC0 e um quadriculado UV original. As oito imagens locais de 512 × 512 servem para as miniaturas e para o `TextureLoader`. O renderizador usa sRGB para mapas de cor. Cada objeto tem repetição, deslocamento e rotação próprios e compartilha a fonte de imagem com outros usuários do mesmo ativo. Recursos são liberados quando deixam de ser usados. Em caso de falha, o material continua exibindo a cor base. A procedência e os créditos estão em [Origem das texturas](texture-assets.md).
+
+As prévias de propriedades contínuas são locais. O fim do gesto confirma apenas uma alteração efetiva. Duplicação, cópia de propriedades, snapshots e reconciliação incluem as configurações de aparência. A verificação em duas sessões detectou uma corrida no eco de criação que podia reverter uma textura aplicada logo após criar o objeto. A criação agora usa o mesmo tratamento de confirmações locais que a atualização.
+
+### Contrato e publicação
+
+`materialSettings` é opcional. Na ausência do campo, o laboratório usa o Standard com os padrões legados. O servidor valida os modelos, faces, cores, limites e IDs do catálogo. A migração `20261126235231_AddMaterialSettings` acrescenta `MaterialSettingsJson` anulável, como `TEXT` no SQLite e `nvarchar(1024)` no SQL Server. A cor, o modo de wireframe e os parâmetros geométricos permanecem nos campos existentes.
+
+O protocolo passa para **3**. Um cliente V2 enviaria o objeto inteiro sem as novas propriedades e poderia sobrescrever a aparência. Para publicar, revisar e ensaiar o script idempotente de `AddGeometryParameters` até `AddMaterialSettings` com o provider SQL Server. Se o ambiente ainda estiver no schema V1, incluir também a migração de geometria. Após backup e validação de leitura, publicar backend e frontend em janela coordenada e solicitar recarga dos clientes. Reverter o schema via `Down` remove o JSON de aparência. Preservar a coluna ou restaurar o backup conforme o plano de recuperação.
+
+### Resultados e pendências
+
+- [x] JavaScript com 23 testes. Inclui os três tipos, propriedades, prévias, mapeamento independente, cópia, duplicação, fallback, hidratação e descarte.
+- [x] Build Vite concluído com os avisos de anotações do SignalR e tamanho do bundle. Build .NET concluído com zero avisos e 37 testes aprovados.
+- [x] SQLite validou a migração de dados V1 e V2, a preservação dos parâmetros de geometria, zero gravações em prévia e confirmação equivalente, e recuperação após reinício.
+- [x] SQL Server com script idempotente gerado e modelo conferido no EF. A execução da migração em SQL Server permanece pendente.
+- [x] Chrome headless com WebGL validou a renderização dos três materiais, oito miniaturas, texturas em cubo e esfera, controles contextuais, transparência, prévias locais, confirmação em duas sessões SignalR e recuperação após reiniciar o backend. O modo local foi exercitado com aplicação de textura e reset de aparência.
+- [ ] Conferir ordenação visual de objetos transparentes sobrepostos, toque e teclado em dispositivo real. Ensaiar publicação e retorno em SQL Server de teste.

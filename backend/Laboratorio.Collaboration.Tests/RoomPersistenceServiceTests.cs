@@ -136,24 +136,7 @@ public sealed class RoomPersistenceServiceTests
         var interceptor = new ThrowAfterCommitInterceptor();
         var factory = CreateFactory(connection, interceptor);
         var legacy = CreateBox();
-        await using (var database = await factory.CreateDbContextAsync())
-        {
-            await database.GetService<IMigrator>().MigrateAsync("20261016104024_InitialRoomPersistence");
-            await database.Database.ExecuteSqlInterpolatedAsync(
-                $"""INSERT INTO Rooms (RoomId, UpdatedAtUtc) VALUES ({CollaborationProtocol.RoomId}, {DateTime.UtcNow})""");
-            await database.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO RoomEntities (
-                    RoomId, Id, Name, Type, Color, MaterialMode,
-                    PositionX, PositionY, PositionZ, RotationX, RotationY, RotationZ, ScaleX, ScaleY, ScaleZ,
-                    AnimationEnabled, AnimationAxis, AnimationSpeed)
-                VALUES (
-                    {CollaborationProtocol.RoomId}, {legacy.Id}, {legacy.Name}, {legacy.Type}, {legacy.Color}, {legacy.MaterialMode},
-                    {legacy.Position.X}, {legacy.Position.Y}, {legacy.Position.Z},
-                    {legacy.Rotation.X}, {legacy.Rotation.Y}, {legacy.Rotation.Z},
-                    {legacy.Scale.X}, {legacy.Scale.Y}, {legacy.Scale.Z},
-                    {legacy.Animation.Enabled}, {legacy.Animation.Axis}, {legacy.Animation.Speed})
-                """);
-        }
+        await SeedLegacyEntityAsync(factory, legacy, "20261016104024_InitialRoomPersistence");
 
         var store = new RoomStateStore();
         var service = CreateService(factory, store);
@@ -188,6 +171,48 @@ public sealed class RoomPersistenceServiceTests
         await StartAndWaitAsync(restarted);
         var reloaded = await restarted.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
         Assert.Equal(final, Assert.Single(reloaded.Entities));
+    }
+
+    [Fact]
+    public async Task MaterialMigrationPreservesV2GeometryAndOnlyWritesConfirmedAppearance()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var factory = CreateFactory(connection, interceptor);
+        var legacy = CreateBox() with
+        {
+            Type = "plane",
+            GeometryParameters = new GeometryParametersDto { ["width"] = 3 }
+        };
+        await SeedLegacyEntityAsync(factory, legacy, "20261126233514_AddGeometryParameters");
+
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        Assert.Equal(legacy, Assert.Single(original.Entities));
+        Assert.True(store.AcquireLock("ana", legacy.Id).Granted);
+        var writes = interceptor.CommitCount;
+        var candidate = legacy with
+        {
+            MaterialSettings = new MaterialSettingsDto(
+                Kind: "phong", Opacity: 0.5, Transparent: true, Side: "double",
+                Specular: "#FFEEDD", Emissive: "#123456", Shininess: 70,
+                EmissiveIntensity: 2, TextureId: "wood", RepeatU: 3, OffsetV: 0.35, TextureRotation: 90)
+        };
+        await service.UpdateEntityAsync("ana", candidate, false);
+        Assert.Equal(legacy, store.GetEntity(legacy.Id));
+        Assert.Equal(writes, interceptor.CommitCount);
+        var final = await service.UpdateEntityAsync("ana", candidate, true);
+        Assert.Equal("#ffeedd", final.MaterialSettings!.Specular);
+        Assert.Equal(writes + 1, interceptor.CommitCount);
+        Assert.Equal(final, await service.UpdateEntityAsync("ana", candidate, true));
+        Assert.Equal(writes + 1, interceptor.CommitCount);
+
+        var restarted = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restarted);
+        var recovered = await restarted.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
+        Assert.Equal(final, Assert.Single(recovered.Entities));
     }
 
     [Fact]
@@ -465,6 +490,33 @@ public sealed class RoomPersistenceServiceTests
         new Vector3Dto(0, 0, 0),
         new Vector3Dto(1, 1, 1),
         new AnimationDto(false, "y", 45));
+
+    private static async Task SeedLegacyEntityAsync(
+        IDbContextFactory<RoomDbContext> factory, EntityDto legacy, string migration)
+    {
+        await using var database = await factory.CreateDbContextAsync();
+        await database.GetService<IMigrator>().MigrateAsync(migration);
+        await database.Database.ExecuteSqlInterpolatedAsync(
+            $"""INSERT INTO Rooms (RoomId, UpdatedAtUtc) VALUES ({CollaborationProtocol.RoomId}, {DateTime.UtcNow})""");
+        await database.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO RoomEntities (
+                RoomId, Id, Name, Type, Color, MaterialMode,
+                PositionX, PositionY, PositionZ, RotationX, RotationY, RotationZ, ScaleX, ScaleY, ScaleZ,
+                AnimationEnabled, AnimationAxis, AnimationSpeed)
+            VALUES (
+                {CollaborationProtocol.RoomId}, {legacy.Id}, {legacy.Name}, {legacy.Type}, {legacy.Color}, {legacy.MaterialMode},
+                {legacy.Position.X}, {legacy.Position.Y}, {legacy.Position.Z},
+                {legacy.Rotation.X}, {legacy.Rotation.Y}, {legacy.Rotation.Z},
+                {legacy.Scale.X}, {legacy.Scale.Y}, {legacy.Scale.Z},
+                {legacy.Animation.Enabled}, {legacy.Animation.Axis}, {legacy.Animation.Speed})
+            """);
+        if (legacy.GeometryParameters is not null)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(legacy.GeometryParameters);
+            await database.Database.ExecuteSqlInterpolatedAsync(
+                $"""UPDATE RoomEntities SET GeometryParametersJson = {json} WHERE Id = {legacy.Id}""");
+        }
+    }
 
     private static async Task<SqliteConnection> OpenDatabaseAsync()
     {

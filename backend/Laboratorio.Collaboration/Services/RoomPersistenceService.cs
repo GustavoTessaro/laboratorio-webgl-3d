@@ -630,6 +630,9 @@ public sealed class RoomPersistenceService(
             : JsonSerializer.Serialize(entity.GeometryParameters);
         record.Color = entity.Color;
         record.MaterialMode = entity.MaterialMode;
+        record.MaterialSettingsJson = entity.MaterialSettings is null
+            ? null
+            : JsonSerializer.Serialize(entity.MaterialSettings);
         record.PositionX = entity.Position.X;
         record.PositionY = entity.Position.Y;
         record.PositionZ = entity.Position.Z;
@@ -658,7 +661,10 @@ public sealed class RoomPersistenceService(
         record.LastEditor,
         record.GeometryParametersJson is null
             ? null
-            : JsonSerializer.Deserialize<GeometryParametersDto>(record.GeometryParametersJson));
+            : JsonSerializer.Deserialize<GeometryParametersDto>(record.GeometryParametersJson),
+        record.MaterialSettingsJson is null
+            ? null
+            : JsonSerializer.Deserialize<MaterialSettingsDto>(record.MaterialSettingsJson));
 
     private void ReplacePersistedEntities(IEnumerable<EntityDto> entities)
     {

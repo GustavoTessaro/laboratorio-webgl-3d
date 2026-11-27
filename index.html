@@ -162,7 +162,14 @@
           </details>
 
           <details class="control-category appearance-controls">
-            <summary id="appearance-title" class="control-section-title">Cores e materiais</summary>
+            <summary id="appearance-title" class="control-section-title">Aparência</summary>
+
+            <label class="geometry-field" for="material-kind">Modelo de material</label>
+            <select id="material-kind" class="geometry-select" data-material-property="kind">
+              <option value="basic">Basic · cor sem iluminação</option>
+              <option value="phong">Phong · brilho especular</option>
+              <option value="standard" selected>Standard · PBR</option>
+            </select>
 
             <div class="color-presets" role="group" aria-label="Cores predefinidas">
               <button class="color-option" type="button" data-object-color="#6c8cff" aria-pressed="true">
@@ -193,7 +200,7 @@
             </label>
 
             <div class="material-mode-control">
-              <span class="mode-label">Material</span>
+              <span class="mode-label">Exibição da malha</span>
               <div class="material-mode-options" role="group" aria-label="Modo de exibição do material">
                 <button class="mode-option" type="button" data-material-mode="solid" aria-pressed="true">
                   Sólido
@@ -203,6 +210,22 @@
                 </button>
               </div>
             </div>
+
+            <div data-material-fields></div>
+
+            <fieldset class="appearance-group">
+              <legend>Textura de cor</legend>
+              <p class="geometry-description">O mapa usa as coordenadas UV da malha e é combinado com a cor do objeto.</p>
+              <div class="texture-options" data-texture-options></div>
+              <p data-texture-status class="object-action-message" role="status" hidden></p>
+            </fieldset>
+
+            <fieldset class="appearance-group" data-texture-mapping hidden>
+              <legend>Mapeamento UV</legend>
+              <p class="geometry-description">Repita ou desloque a imagem nos eixos U e V. A rotação usa o centro da imagem.</p>
+              <div data-texture-fields></div>
+              <button class="reset-appearance" type="button" data-reset-texture>Restaurar mapeamento</button>
+            </fieldset>
 
             <button class="reset-appearance" type="button" data-reset-appearance>
               Restaurar aparência

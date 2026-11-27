@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { createEntityRegistry } from './graphics/entity-registry.js';
 import { bindTransformEditing, createSceneControls, synchronizeTransformTarget } from './graphics/scene-controls.js';
-import { createLighting, SOLID_MATERIAL, WORKSPACE_SIZE } from './graphics/scene-assets.js';
+import { createLighting, WORKSPACE_SIZE } from './graphics/scene-assets.js';
+import { SOLID_MATERIAL } from './graphics/object-materials.js';
 
 export { createEntityRegistry, bindTransformEditing, synchronizeTransformTarget };
 
@@ -337,7 +338,7 @@ export function createScene(container, {
   }
 
   function resetAppearance() {
-    entityRegistry.setAppearance(entityRegistry.getSelectedEntityOrThrow(), SOLID_MATERIAL.color, 'solid');
+    entityRegistry.setAppearance(entityRegistry.getSelectedEntityOrThrow(), SOLID_MATERIAL.color, 'solid', null);
   }
 
   const grid = new THREE.GridHelper(WORKSPACE_SIZE, 40, '#68748a', '#343d4d');

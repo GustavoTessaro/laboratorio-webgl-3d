@@ -1,0 +1,10 @@
+{
+  "wood": { "name": "Madeira", "file": "wood.jpg" },
+  "brick": { "name": "Tijolos", "file": "brick.jpg" },
+  "marble": { "name": "Mármore", "file": "marble.jpg" },
+  "stone": { "name": "Pedra", "file": "stone.jpg" },
+  "metal": { "name": "Metal", "file": "metal.jpg" },
+  "concrete": { "name": "Concreto", "file": "concrete.jpg" },
+  "fabric": { "name": "Tecido", "file": "fabric.jpg" },
+  "uv-grid": { "name": "Quadriculado UV", "file": "uv-grid.png" }
+}

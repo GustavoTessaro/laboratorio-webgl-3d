@@ -2,6 +2,7 @@ import './style.css';
 import { createScene } from './scene.js';
 import { CollaborationClient, COLLABORATION_PROTOCOL_VERSION } from './collaboration.js';
 import { sameGeometryParameters } from './graphics/geometries.js';
+import { sameMaterialSettings } from './graphics/object-materials.js';
 import { createTransformPreviews } from './edit-gestures.js';
 import { createControlsPanel } from './controls-panel.js';
 
@@ -21,6 +22,7 @@ function sameEntityState(first, second) {
   if (!first || !second) return first === second;
   return ['id', 'name', 'type', 'color', 'materialMode'].every((key) => first[key] === second[key]) &&
     sameGeometryParameters(first.geometryParameters, second.geometryParameters) &&
+    sameMaterialSettings(first.materialSettings, second.materialSettings) &&
     ['position', 'rotation', 'scale'].every((key) =>
       ['x', 'y', 'z'].every((axis) => first[key][axis] === second[key][axis]),
     ) &&
@@ -140,6 +142,17 @@ try {
     }
   }
 
+  async function publishCreation(entity) {
+    inFlightUpdate = entity;
+    try {
+      const created = await collaborationClient.createEntity(entity);
+      serverEntities.set(created.id, created);
+      updatePresence(created.id);
+    } finally {
+      inFlightUpdate = null;
+    }
+  }
+
   async function processOperation(operation) {
     if (operation.isCurrent && !operation.isCurrent()) return;
     if (!collaborationClient?.connected) {
@@ -170,18 +183,9 @@ try {
     const exists = serverEntities.has(entity.id);
     const known = serverEntities.get(entity.id);
     if (operation.final && sameEntityState(known, entity)) return;
-    if (operation.kind === 'create' && !exists) {
-      const created = await collaborationClient.createEntity(entity);
-      serverEntities.set(created.id, created);
-      updatePresence(created.id);
-      return;
-    }
-
     if (!exists) {
       if (operation.final === false || operation.expected) return;
-      const created = await collaborationClient.createEntity(entity);
-      serverEntities.set(created.id, created);
-      updatePresence(created.id);
+      await publishCreation(entity);
       return;
     }
 
@@ -310,7 +314,10 @@ try {
       },
       onEntityUpserted: (entity) => {
         serverEntities.set(entity.id, entity);
-        if (!sameEntityState(inFlightUpdate, entity)) {
+        const local = sceneControls.getEntity(entity.id);
+        if (local && sameEntityState(inFlightUpdate, entity)) {
+          local.lastEditor = entity.lastEditor ?? null;
+        } else {
           cancelLocalInputs(entity.id);
           if (activeEdits.has(entity.id)) sceneControls.cancelTransformEdit();
           sceneControls.applySharedEntity(entity);
