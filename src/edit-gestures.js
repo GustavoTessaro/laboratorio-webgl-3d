@@ -28,7 +28,7 @@ export function bindLocalInput(input, { getEntity, preview, restore, commit, sig
   input.addEventListener('pointercancel', () => finish(true), { signal });
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') finish(true);
-    if (input.type === 'range' && rangeKeys.has(event.key)) heldKeys.add(event.key);
+    if (['range', 'number'].includes(input.type) && rangeKeys.has(event.key)) heldKeys.add(event.key);
   }, { signal });
   input.addEventListener('keyup', (event) => {
     if (heldKeys.delete(event.key) && heldKeys.size === 0) finish(false);

@@ -326,6 +326,8 @@
 
           <details class="control-category animation-controls">
             <summary id="animation-title" class="control-section-title">Animações</summary>
+            <details class="inspection-group" open>
+              <summary>Rotação automática</summary>
             <p class="animation-description">
               A rotação é atualizada a cada quadro com base no tempo decorrido,
               mantendo um movimento consistente em diferentes telas. Ela começa
@@ -378,6 +380,13 @@
             <button class="reset-appearance reset-orientation" type="button" data-reset-orientation>
               Restaurar orientação
             </button>
+            </details>
+            <details class="inspection-group" data-trajectory-controls>
+              <summary>Trajetória de movimento</summary>
+              <p class="geometry-description">O percurso é relativo à posição base, nos eixos da cena. A duração mede uma travessia. O comprimento de arco distribui o movimento aproximadamente pela distância percorrida, mesmo quando o parâmetro da curva avança de forma irregular.</p>
+              <div data-trajectory-fields></div>
+              <p class="animation-status" data-trajectory-status role="status" aria-live="polite"></p>
+            </details>
           </details>
           <details class="control-category inspector-controls" data-graphics-inspector>
             <summary class="control-section-title">Inspetor de Computação Gráfica</summary>

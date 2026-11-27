@@ -5,6 +5,30 @@ namespace Laboratorio.Collaboration.Tests;
 
 public sealed class RoomStateStoreTests
 {
+    [Fact]
+    public void TrajectoryValidationRejectsOvershootAndChecksWholeOrientedObject()
+    {
+        var entity = CreateBox() with { Position = new Vector3Dto(2, 3, 0) };
+        RoomStateStore.ValidateEntity(entity with { Trajectory = new TrajectoryDto(Enabled: true) });
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            Trajectory = new TrajectoryDto(Enabled: true, Type: "catmull",
+                Points: [new(-7, 0, 0), new(7, 0, 0), new(7, 0, 0), new(-7, 0, 0)])
+        }));
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            Position = new Vector3Dto(0, 0.75, 0),
+            Trajectory = new TrajectoryDto(Enabled: true, Orient: true)
+        }));
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            Trajectory = new TrajectoryDto(Type: "catmull", Points: [new(0, 0, 0), new(0, 0, 0)])
+        }));
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            Trajectory = new TrajectoryDto(Duration: double.PositiveInfinity)
+        }));
+    }
     private static EntityDto CreateBox(string? id = null) => new(
         id ?? Guid.NewGuid().ToString(),
         "Cubo",

@@ -72,6 +72,9 @@ namespace Laboratorio.Collaboration.Data.Migrations
 
                     b.Property<double>("ScaleZ");
 
+                    b.Property<string>("TrajectoryJson")
+                        .HasMaxLength(2048);
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(16);

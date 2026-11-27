@@ -36,7 +36,7 @@ export function synchronizeTransformTarget(transformControls, entity, mode, spac
   transformControls.getHelper().visible = Boolean(mode);
 }
 
-export function bindTransformEditing(controls, registry, { onStart, onPreview, onEnd }) {
+export function bindTransformEditing(controls, registry, { onStart, onPreview, onEnd, onRejected }) {
   let edit = null;
 
   function setPose(mesh, pose) {
@@ -45,7 +45,8 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     mesh.scale.set(pose.scale.x, pose.scale.y, pose.scale.z);
   }
 
-  function getEditedSnapshot({ entity, initialPose, mode, space, axis }, final) {
+  function getEditedSnapshot(current, final) {
+    const { entity, initialPose, mode, space, axis } = current;
     const { mesh } = entity;
     const pose = registry.serializeEntity(entity.id, mesh);
     const base = registry.serializeEntity(entity.id);
@@ -80,15 +81,26 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     } else {
       mesh.scale.set(pose.scale.x, pose.scale.y, pose.scale.z);
     }
-    if (mode === 'scale') registry.constrainEntityScale(entity, false);
-    else registry.constrainEntity(entity, false);
+    const valid = mode === 'scale'
+      ? registry.constrainEntityScale(entity, false)
+      : registry.constrainEntity(entity, false);
+    if (!valid && entity.trajectory?.enabled) {
+      current.invalid = true;
+      registry.applyVisualPose(entity);
+      return null;
+    }
 
     const snapshot = registry.serializeEntity(entity.id, mesh);
     const changedBase = ['position', 'rotation', 'scale'].some((part) =>
       ['x', 'y', 'z'].some((axis) => Math.abs(snapshot[part][axis] - base[part][axis]) > BOUNDS_EPSILON),
     );
     if (final && changedBase) registry.constrainEntity(entity);
-    else setPose(mesh, pose);
+    else {
+      setPose(mesh, pose);
+      if (entity.trajectory?.enabled && mode === 'scale') {
+        mesh.scale.set(snapshot.scale.x, snapshot.scale.y, snapshot.scale.z);
+      }
+    }
     return changedBase ? snapshot : null;
   }
 
@@ -97,9 +109,11 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     const current = edit;
     const { entity } = current;
     edit = null;
-    const snapshot = cancelled ? null : getEditedSnapshot(current, true);
+    const snapshot = cancelled || current.invalid ? null : getEditedSnapshot(current, true);
+    if (!cancelled && current.invalid) onRejected?.();
     entity.editingTransform = false;
-    if (!snapshot) registry.restoreBase(entity);
+    if (entity.trajectory?.enabled) registry.applyVisualPose(entity);
+    else if (!snapshot) registry.restoreBase(entity);
     onEnd?.(entity.id, snapshot);
   }
 
@@ -110,8 +124,9 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     }
     const entity = registry.getEntity(controls.object?.userData.entityId);
     if (!entity) return;
-    if (entity.geometryPreview) {
+    if (entity.geometryPreview || entity.trajectoryPreview !== undefined) {
       registry.cancelGeometryPreview(entity);
+      registry.cancelTrajectoryPreview(entity);
       controls.pointerUp(null);
       return;
     }
@@ -126,8 +141,11 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
   function handleObjectChange() {
     if (!edit) return;
     const { entity } = edit;
-    if (controls.mode === 'scale') registry.constrainEntityScale(entity, false);
-    else registry.constrainEntity(entity, false);
+    edit.invalid = false;
+    if (!entity.trajectory?.enabled) {
+      if (controls.mode === 'scale') registry.constrainEntityScale(entity, false);
+      else registry.constrainEntity(entity, false);
+    }
     const snapshot = getEditedSnapshot(edit, false);
     if (snapshot || edit.hasPreview) {
       edit.hasPreview = Boolean(snapshot);

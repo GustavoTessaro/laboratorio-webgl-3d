@@ -10,6 +10,7 @@ import { createLightingSession } from './lighting-session.js';
 import { createRoomSettingsSession } from './room-settings-session.js';
 import { bindParticleControls } from './particle-controls.js';
 import { bindInspectorControls } from './inspector-controls.js';
+import { sameTrajectory } from './graphics/trajectory-settings.js';
 import { changeParticles, EMPTY_PARTICLES, sameParticleSettings } from './graphics/particle-settings.js';
 
 const container = document.querySelector('#scene-container');
@@ -28,6 +29,7 @@ function sameEntityState(first, second) {
   if (!first || !second) return first === second;
   return ['id', 'name', 'type', 'color', 'materialMode'].every((key) => first[key] === second[key]) &&
     sameGeometryParameters(first.geometryParameters, second.geometryParameters) &&
+    sameTrajectory(first.trajectory, second.trajectory) &&
     sameMaterialSettings(first.materialSettings, second.materialSettings) &&
     ['position', 'rotation', 'scale'].every((key) =>
       ['x', 'y', 'z'].every((axis) => first[key][axis] === second[key][axis]),

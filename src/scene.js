@@ -6,6 +6,7 @@ import { createViewCamera } from './graphics/view-camera.js';
 import { createCoordinateHelpers } from './graphics/coordinate-helpers.js';
 import { createParticleSystem } from './graphics/particle-system.js';
 import { createGraphicsInspector } from './graphics/graphics-inspector.js';
+import { createTrajectoryHelper } from './graphics/trajectory-helper.js';
 import { SOLID_MATERIAL } from './graphics/object-materials.js';
 
 export { createEntityRegistry, bindTransformEditing, synchronizeTransformTarget };
@@ -148,6 +149,9 @@ export function createScene(container, {
   }
 
   const transformEdit = bindTransformEditing(transformControls, entityRegistry, {
+    onRejected() {
+      container.dispatchEvent(new Event('trajectory-out-of-bounds', { bubbles: true }));
+    },
     onStart(id) {
       orbitWasEnabled = controls.enabled;
       controls.enabled = false;
@@ -383,6 +387,21 @@ export function createScene(container, {
     countParticles: particles.countVisible,
     countLights: lighting.countActive,
   });
+  const trajectoryHelper = createTrajectoryHelper(scene, entityRegistry.readBaseTransform);
+
+  function changeTrajectoryPlayback(action) {
+    const entity = entityRegistry.getSelectedEntity();
+    const motion = entity?.trajectoryMotion;
+    if (!motion || entity.editingTransform) return;
+    if (action === 'restart') motion.elapsed = 0;
+    else {
+      motion.paused = action === 'pause';
+      if (!motion.paused && motion.settings.mode === 'once' && motion.elapsed === motion.settings.duration) {
+        motion.elapsed = 0;
+      }
+    }
+    entityRegistry.applyVisualPose(entity);
+  }
 
   function toggleRotation() {
     const entity = entityRegistry.getSelectedEntityOrThrow();
@@ -407,7 +426,9 @@ export function createScene(container, {
     const before = entityRegistry.serializeEntity(entity.id);
     entityRegistry.restoreBase(entity);
     entity.mesh.rotation.set(0, 0, 0);
-    entityRegistry.constrainEntity(entity);
+    const valid = entityRegistry.constrainEntity(entity);
+    if (entity.trajectory?.enabled) entityRegistry.applyVisualPose(entity);
+    if (!valid) throw new Error('A orientação restaurada faria a trajetória ultrapassar os limites da cena.');
     if (['x', 'y', 'z'].some((axis) => before.rotation[axis] !== 0)) {
       collaborationHandlers.onEntityChanged?.(entityRegistry.serializeEntity(entity.id), { continuous: false });
     }
@@ -440,6 +461,7 @@ export function createScene(container, {
     entityRegistry.updateAnimations(delta);
     particles.update(delta);
     const selectedEntity = entityRegistry.getSelectedEntity();
+    trajectoryHelper.update(selectedEntity);
     coordinates.update(selectedEntity?.mesh);
     if (selectedEntity) {
       selectionHelper.setFromObject(selectedEntity.mesh);
@@ -477,6 +499,7 @@ export function createScene(container, {
     cameraView.dispose();
     coordinates.dispose();
     inspector.dispose();
+    trajectoryHelper.dispose();
     for (const id of presenceLabels.keys()) removePresenceLabel(id);
     entityRegistry.dispose();
     selectionHelper.removeFromParent();
@@ -522,6 +545,8 @@ export function createScene(container, {
     setLightingHelper: lighting.setHelper,
     particles,
     inspector,
+    setTrajectoryHelper: trajectoryHelper.setVisible,
+    changeTrajectoryPlayback,
     toggleRotation,
     setRotationSpeed,
     setRotationAxis,

@@ -32,6 +32,7 @@ public sealed class RoomDbContext(DbContextOptions<RoomDbContext> options) : DbC
             entity.Property(item => item.MaterialMode).HasMaxLength(16).IsRequired();
             entity.Property(item => item.MaterialSettingsJson).HasMaxLength(1024);
             entity.Property(item => item.AnimationAxis).HasMaxLength(1).IsRequired();
+            entity.Property(item => item.TrajectoryJson).HasMaxLength(2048);
             entity.Property(item => item.LastEditor).HasMaxLength(32);
             entity.HasOne<RoomRecord>()
                 .WithMany()
@@ -71,5 +72,6 @@ public sealed class RoomEntityRecord
     public bool AnimationEnabled { get; set; }
     public string AnimationAxis { get; set; } = string.Empty;
     public double AnimationSpeed { get; set; }
+    public string? TrajectoryJson { get; set; }
     public string? LastEditor { get; set; }
 }

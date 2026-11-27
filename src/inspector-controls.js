@@ -121,6 +121,7 @@ export function bindInspectorControls(root, inspector, signal) {
   function updateGeometry(entity, facts) {
     const texture = entity?.materialSettings?.textureId;
     const animation = entity?.animation;
+    const motion = entity?.trajectoryPreview === undefined ? entity?.trajectoryMotion : entity.trajectoryPreview;
     display(geometry.name, entity?.name);
     display(geometry.type, facts ? `${geometries[entity.type].name} · ${facts.type}` : null);
     display(geometry.material, entity?.mesh.material.type);
@@ -134,7 +135,9 @@ export function bindInspectorControls(root, inspector, signal) {
       ? ' (falha de carregamento)' : status === 'loading' ? ' (carregando)' : ''}` : 'Sem textura') : null);
     display(geometry.animation, animation ? (animation.enabled
       ? `${entity.editingTransform ? 'Suspensa pelo gizmo' : 'Ativa'} · ${animation.axis.toUpperCase()} · ${numeric.format(animation.speed)}°/s`
-      : 'Desativada') : null);
+      : 'Rotação desativada') + (motion
+        ? ` · Trajetória ${entity.editingTransform || motion.paused ? 'pausada' : 'ativa'}`
+        : '') : null);
     display(sampling, (facts?.vertices ?? 0) > INSPECTOR_SAMPLE_LIMIT
       ? `Amostragem uniforme de até ${INSPECTOR_SAMPLE_LIMIT} de ${numeric.format(facts.vertices)} vértices e normais.`
       : `Vértices armazenados e suas normais são exibidos até o limite de ${INSPECTOR_SAMPLE_LIMIT} amostras.`);

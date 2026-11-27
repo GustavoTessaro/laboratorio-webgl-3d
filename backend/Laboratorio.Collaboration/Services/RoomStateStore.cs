@@ -314,6 +314,8 @@ public sealed class RoomStateStore
             var committed = _entities[entity.Id];
             if (!final)
             {
+                if (entity.Trajectory != committed.Trajectory)
+                    throw new InvalidOperationException("Alterações de trajetória precisam de confirmação final.");
                 _locks[entity.Id] = _locks[entity.Id] with { HasPreview = true };
                 return entity with { LastEditor = committed.LastEditor };
             }
@@ -351,7 +353,7 @@ public sealed class RoomStateStore
 
     public static void ValidateEntity(EntityDto entity) => CanonicalizeEntity(entity);
 
-    private static GeometryParametersDto? ValidateAndNormalizeGeometry(EntityDto entity)
+    private static (GeometryParametersDto? Geometry, TrajectoryDto? Trajectory) ValidateSpatialSettings(EntityDto entity)
     {
         if (entity is null ||
             entity.Position is null ||
@@ -414,7 +416,15 @@ public sealed class RoomStateStore
         {
             throw new InvalidOperationException("A transformação ultrapassa os limites do cenário.");
         }
-        return geometryParameters;
+        var trajectory = TrajectorySettings.Normalize(entity.Trajectory);
+        var sx = halfSize.X * entity.Scale.X;
+        var sy = halfSize.Y * entity.Scale.Y;
+        var sz = halfSize.Z * entity.Scale.Z;
+        var radius = Math.Sqrt(sx * sx + sy * sy + sz * sz);
+        TrajectorySettings.ValidateBounds(trajectory, entity.Position, extents,
+            entity.Animation.Enabled || trajectory?.Orient == true ? radius : null,
+            WorkspaceLimit, WorkspaceHeight, BoundsEpsilon);
+        return (geometryParameters, trajectory);
     }
 
     private static (double X, double Y, double Z) GetWorldExtents(
@@ -459,11 +469,12 @@ public sealed class RoomStateStore
 
     private static EntityDto CanonicalizeEntity(EntityDto entity)
     {
-        var geometry = ValidateAndNormalizeGeometry(entity);
+        var (geometry, trajectory) = ValidateSpatialSettings(entity);
         return entity with
         {
             Id = Guid.Parse(entity.Id).ToString(),
             GeometryParameters = geometry,
+            Trajectory = trajectory,
             MaterialSettings = MaterialSettings.Normalize(entity.MaterialSettings)
         };
     }

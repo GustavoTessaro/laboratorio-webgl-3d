@@ -2,6 +2,7 @@ import { bindLocalInput } from './edit-gestures.js';
 import { bindGeometryControls } from './geometry-controls.js';
 import { bindMaterialControls } from './material-controls.js';
 import { bindCameraControls } from './camera-controls.js';
+import { bindTrajectoryControls } from './trajectory-controls.js';
 
 export function createControlsPanel(root, sceneControls, { getLock, isLocked, onDelete }) {
   const lifetime = new AbortController();
@@ -9,6 +10,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   const geometryControls = bindGeometryControls(root, sceneControls, signal);
   const materialControls = bindMaterialControls(root, sceneControls, signal, syncSelectedEntity);
   const cameraControls = bindCameraControls(root, sceneControls, signal);
+  const trajectoryControls = bindTrajectoryControls(root.querySelector('[data-trajectory-controls]'), sceneControls, signal);
   const sceneObjectList = root.querySelector('#scene-object-list');
   const duplicateObjectButton = root.querySelector('[data-duplicate-object]');
   const deleteObjectButton = root.querySelector('[data-delete-object]');
@@ -26,6 +28,13 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   const rotationSpeedOutput = root.querySelector('#rotation-speed-value');
   const rotationAxisButtons = root.querySelectorAll('[data-rotation-axis]');
   const resetOrientationButton = root.querySelector('[data-reset-orientation]');
+
+  root.ownerDocument.addEventListener('trajectory-out-of-bounds', () => {
+    const message = 'A transformação faria a trajetória ultrapassar os limites da cena.';
+    trajectoryControls.report(message);
+    objectActionMessage.hidden = false;
+    objectActionMessage.textContent = message;
+  }, { signal });
 
   function updateColorSelection(color) {
     const normalizedColor = color.toLowerCase();
@@ -56,6 +65,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     sceneControls.setSelectedEntityEditable(!lockedByAnotherParticipant);
     geometryControls.sync(entity, lockedByAnotherParticipant);
     materialControls.sync(entity, lockedByAnotherParticipant);
+    trajectoryControls.sync(entity, lockedByAnotherParticipant);
     const selectionDependentControls = [
       ...colorButtons,
       customColorInput,
@@ -192,7 +202,9 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   applyPropertiesButton.addEventListener('click', () => {
     const entity = sceneControls.getSelectedEntity();
     if (!entity || !sceneControls.hasCopiedProperties()) return;
-    sceneControls.applyCopiedProperties(entity.id);
+    const applied = sceneControls.applyCopiedProperties(entity.id);
+    objectActionMessage.hidden = applied;
+    objectActionMessage.textContent = applied ? '' : 'As propriedades copiadas não cabem nos limites da trajetória neste objeto.';
   }, { signal });
 
   colorButtons.forEach((button) => {
@@ -230,9 +242,19 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     syncSelectedEntity();
   }, { signal });
 
+  function updateRotation(action) {
+    try {
+      action();
+      trajectoryControls.report('');
+      syncSelectedEntity();
+    } catch (error) {
+      rotationStatus.textContent = error.message;
+      trajectoryControls.report(error.message);
+    }
+  }
+
   rotationToggleButton.addEventListener('click', () => {
-    sceneControls.toggleRotation();
-    syncSelectedEntity();
+    updateRotation(sceneControls.toggleRotation);
   }, { signal });
 
   const speedGesture = bindLocalInput(rotationSpeedInput, {
@@ -250,20 +272,18 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
       }
     },
     commit: (value, entity) => {
-      sceneControls.setRotationSpeed(Number(value), entity);
-      syncSelectedEntity();
+      updateRotation(() => sceneControls.setRotationSpeed(Number(value), entity));
     },
   });
 
   rotationAxisButtons.forEach((button) => {
     button.addEventListener('click', () => {
-      sceneControls.setRotationAxis(button.dataset.rotationAxis);
-      syncSelectedEntity();
+      updateRotation(() => sceneControls.setRotationAxis(button.dataset.rotationAxis));
     }, { signal });
   });
 
   resetOrientationButton.addEventListener('click', () => {
-    sceneControls.resetOrientation();
+    updateRotation(sceneControls.resetOrientation);
   }, { signal });
 
   const localInputs = [colorGesture, speedGesture];
@@ -271,6 +291,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   function cancelLocalInputs(entityId) {
     geometryControls.cancel(entityId);
     materialControls.cancel(entityId);
+    trajectoryControls.cancel(entityId);
     for (const input of localInputs) {
       if (entityId === undefined || input.entity?.id === entityId) input.cancel();
     }

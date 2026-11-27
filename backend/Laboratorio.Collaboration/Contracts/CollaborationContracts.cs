@@ -21,7 +21,33 @@ public sealed record EntityDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     GeometryParametersDto? GeometryParameters = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    MaterialSettingsDto? MaterialSettings = null);
+    MaterialSettingsDto? MaterialSettings = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    TrajectoryDto? Trajectory = null);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record TrajectoryDto(
+    bool Enabled = false, string Type = "circle", double Duration = 6, bool Reverse = false,
+    string Mode = "loop", string Plane = "xz", double Radius = 1, double RadiusB = 0.6,
+    double Height = 2, int Turns = 2, bool Orient = false, Vector3Dto[]? Points = null)
+{
+    public bool Equals(TrajectoryDto? other) =>
+        other is not null && Enabled == other.Enabled && Type == other.Type && Duration == other.Duration &&
+        Reverse == other.Reverse && Mode == other.Mode && Plane == other.Plane &&
+        Radius == other.Radius && RadiusB == other.RadiusB && Height == other.Height &&
+        Turns == other.Turns && Orient == other.Orient &&
+        (Points is null ? other.Points is null : other.Points is not null && Points.SequenceEqual(other.Points));
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(HashCode.Combine(Enabled, Type, Duration, Reverse, Mode, Plane));
+        hash.Add(HashCode.Combine(Radius, RadiusB, Height, Turns, Orient));
+        if (Points is not null)
+            foreach (var point in Points) hash.Add(point);
+        return hash.ToHashCode();
+    }
+}
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record MaterialSettingsDto(
@@ -82,6 +108,6 @@ public sealed record LockResultDto(bool Granted, string? OwnerName = null, strin
 
 public static class CollaborationProtocol
 {
-    public const int Version = 5;
+    public const int Version = 6;
     public const string RoomId = "laboratorio-principal";
 }

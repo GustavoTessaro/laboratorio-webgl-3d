@@ -20,6 +20,8 @@ test('the panel cancels a local color preview on a foreign lock and removes list
     return elements.get(selector);
   };
   querySelector('#scene-object-list').querySelectorAll = () => [];
+  const ownerDocument = Object.assign(new EventTarget(), { createElement: () => new Control() });
+  Object.assign(querySelector('[data-trajectory-controls]'), { querySelector, ownerDocument });
   let visualColor = '#6c8cff';
   const entity = {
     id: 'box',
@@ -34,7 +36,7 @@ test('the panel cancels a local color preview on a foreign lock and removes list
   let locked = false;
   let editable;
   const panel = createControlsPanel({
-    querySelector, querySelectorAll: () => [], ownerDocument: { createElement: () => new Control() },
+    querySelector, querySelectorAll: () => [], ownerDocument,
   }, {
     getSelectedEntity: () => entity,
     setSelectedEntityEditable(value) { editable = value; },

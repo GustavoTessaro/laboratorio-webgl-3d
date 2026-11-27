@@ -722,6 +722,7 @@ public sealed class RoomPersistenceService(
         record.AnimationEnabled = entity.Animation.Enabled;
         record.AnimationAxis = entity.Animation.Axis;
         record.AnimationSpeed = entity.Animation.Speed;
+        record.TrajectoryJson = entity.Trajectory is null ? null : JsonSerializer.Serialize(entity.Trajectory);
         record.LastEditor = entity.LastEditor;
     }
 
@@ -741,7 +742,8 @@ public sealed class RoomPersistenceService(
             : JsonSerializer.Deserialize<GeometryParametersDto>(record.GeometryParametersJson),
         record.MaterialSettingsJson is null
             ? null
-            : JsonSerializer.Deserialize<MaterialSettingsDto>(record.MaterialSettingsJson));
+            : JsonSerializer.Deserialize<MaterialSettingsDto>(record.MaterialSettingsJson),
+        record.TrajectoryJson is null ? null : JsonSerializer.Deserialize<TrajectoryDto>(record.TrajectoryJson));
 
     private void ReplacePersistedEntities(IEnumerable<EntityDto> entities)
     {

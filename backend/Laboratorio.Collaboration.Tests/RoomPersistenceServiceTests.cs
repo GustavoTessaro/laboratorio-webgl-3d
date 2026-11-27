@@ -666,6 +666,43 @@ public sealed class RoomPersistenceServiceTests
         Assert.True(await context.RoomEntities.AnyAsync(item => item.Id == entity.Id));
     }
 
+    [Fact]
+    public async Task TrajectoryMigratesLegacyEntityAndPersistsOnlyConfirmedChanges()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var factory = CreateFactory(connection);
+        var legacy = CreateBox();
+        await SeedLegacyEntityAsync(factory, legacy, "20261127004156_AddRoomParticles");
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var joined = await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        Assert.Equal(legacy, Assert.Single(joined.Entities));
+        Assert.True(store.AcquireLock("ana", legacy.Id).Granted);
+
+        var settings = new TrajectoryDto(Enabled: true, Type: "catmull",
+            Points: [new(-1, 0, 0), new(0, 1, 0), new(1, 0, 0)]);
+        var edited = legacy with { Position = new Vector3Dto(0, 3, 0), Trajectory = settings };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateEntityAsync("ana", edited, false));
+        await service.UpdateEntityAsync("ana", edited with { Trajectory = null }, false);
+        await using (var context = factory.CreateDbContext())
+            Assert.Null((await context.RoomEntities.SingleAsync()).TrajectoryJson);
+        var confirmed = await service.UpdateEntityAsync("ana", edited, true);
+        Assert.Equal(settings, confirmed.Trajectory);
+
+        await using (var context = factory.CreateDbContext())
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER prevent_redundant_trajectory_write
+                BEFORE UPDATE ON RoomEntities
+                BEGIN SELECT RAISE(ABORT, 'unexpected write'); END;
+                """);
+        Assert.Equal(confirmed, await service.UpdateEntityAsync("ana", edited, true));
+        var restarted = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restarted);
+        Assert.Equal(confirmed, Assert.Single((await restarted.JoinAsync("bia", "Bia",
+            CollaborationProtocol.Version, [])).Entities));
+    }
+
     private static EntityDto CreateBox() => new(
         Guid.NewGuid().ToString(),
         "Cubo",

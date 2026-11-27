@@ -6,6 +6,8 @@ import {
   createMaterialController, createTexturePool, normalizeMaterialSettings, sameMaterialSettings, SOLID_MATERIAL,
 } from './object-materials.js';
 import { createGeometry, describeGeometry, geometries, sameGeometryParameters } from './geometries.js';
+import { normalizeTrajectory, sameTrajectory, trajectoryFits } from './trajectory-settings.js';
+import { advanceTrajectory, createTrajectoryMotion, createTrajectoryPose } from './trajectory-motion.js';
 
 const INITIAL_ROTATION_SPEED = 45;
 const INITIAL_ROTATION_AXIS = 'y';
@@ -31,6 +33,9 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   const interpolatedScale = new THREE.Vector3();
   const baseMatrix = new THREE.Matrix4();
   const baseQuaternion = new THREE.Quaternion();
+  const trajectoryExtents = new THREE.Vector3();
+  const scaledHalfSize = new THREE.Vector3();
+  const applyTrajectoryPose = createTrajectoryPose();
   const validTransforms = new Map();
   let selectedEntityId = null;
   let nextSpawnIndex = 0;
@@ -53,6 +58,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       rotation: { x: transform.rotation.x, y: transform.rotation.y, z: transform.rotation.z },
       scale: { x: transform.scale.x, y: transform.scale.y, z: transform.scale.z },
       animation: { ...entity.animation },
+      trajectory: entity.trajectory,
       lastEditor: entity.lastEditor ?? null,
     };
   }
@@ -72,6 +78,51 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     entity.mesh.scale.copy(base.scale);
   }
 
+  function fitsTrajectory(settings, pose, halfSize, animation, position = pose.position) {
+    if (!settings?.enabled) return true;
+    scaledHalfSize.copy(halfSize).multiply(pose.scale);
+    const radius = animation.enabled || settings.orient ? scaledHalfSize.length() : null;
+    baseMatrix.compose(position, baseQuaternion.setFromEuler(pose.rotation), pose.scale);
+    measureBounds(halfSize, baseMatrix);
+    entityBounds.getSize(trajectoryExtents).multiplyScalar(0.5);
+    return trajectoryFits(settings, position, trajectoryExtents, radius);
+  }
+
+  function requireTrajectoryFit(settings, pose, halfSize, animation, position) {
+    if (!fitsTrajectory(settings, pose, halfSize, animation, position)) {
+      throw new Error('A trajetória completa, incluindo as dimensões do objeto, ultrapassa os limites da cena.');
+    }
+  }
+
+  function setTrajectory(entity, input, preview = false) {
+    if (entity.editingTransform) return false;
+    const settings = normalizeTrajectory(input);
+    const base = validTransforms.get(entity.id);
+    requireTrajectoryFit(settings, base, entity.geometrySpec.halfSize, entity.animation);
+    if (entity.geometryPreview) {
+      requireTrajectoryFit(settings, base, entity.geometryPreview.spec.halfSize, entity.animation);
+    }
+    if (preview) {
+      entity.trajectoryPreview = settings?.enabled ? createTrajectoryMotion(settings) : null;
+      applyVisualPose(entity);
+      return true;
+    }
+    cancelTrajectoryPreview(entity);
+    if (sameTrajectory(settings, entity.trajectory)) return false;
+    if (entity.trajectory?.enabled && !settings?.enabled) entity.rotationPhase = 0;
+    entity.trajectory = settings;
+    entity.trajectoryMotion = settings?.enabled ? createTrajectoryMotion(settings) : null;
+    applyVisualPose(entity);
+    onEntityChanged(serializeEntity(entity));
+    return true;
+  }
+
+  function cancelTrajectoryPreview(entity) {
+    if (entity.trajectoryPreview === undefined) return;
+    entity.trajectoryPreview = undefined;
+    if (!entity.editingTransform) applyVisualPose(entity);
+  }
+
   function constrainEntity(entity, remember = true, halfSize = entity.geometrySpec.halfSize) {
     const { mesh } = entity;
     mesh.updateWorldMatrix(true, false);
@@ -80,7 +131,15 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       restoreBase(entity);
       return false;
     }
+    if (entity.trajectory?.enabled && positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2) {
+      restoreBase(entity);
+      return false;
+    }
     mesh.position.add(positionCorrection);
+    if (!fitsTrajectory(entity.trajectory, mesh, halfSize, entity.animation)) {
+      restoreBase(entity);
+      return false;
+    }
     if (remember) {
       validTransforms.set(entity.id, {
         position: mesh.position.clone(),
@@ -197,6 +256,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     }
 
     if (!constrainEntity(entity, remember)) {
+      if (entity.trajectory?.enabled) return false;
       mesh.scale.copy(previousScale);
       constrainEntity(entity, remember);
     }
@@ -239,6 +299,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       color: position?.color ?? SOLID_MATERIAL.color,
       materialMode: position?.materialMode ?? 'solid',
       rotationPhase: 0,
+      trajectory: null,
       animation: position?.animation ? { ...position.animation } : {
         enabled: false,
         axis: INITIAL_ROTATION_AXIS,
@@ -255,6 +316,9 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     constrainEntity(entity);
     mesh.scale.copy(requestedScale);
     constrainEntityScale(entity);
+    entity.trajectory = normalizeTrajectory(position?.trajectory);
+    entity.trajectoryMotion = entity.trajectory?.enabled ? createTrajectoryMotion(entity.trajectory) : null;
+    applyVisualPose(entity);
     selectedEntityId = id;
     onSelectionChange(entity);
     onEntityCreated(serializeEntity(entity));
@@ -292,11 +356,13 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
         entityBounds.min.z + offsetZ >= -WORKSPACE_LIMIT &&
         entityBounds.max.z + offsetZ <= WORKSPACE_LIMIT
       ) {
-        return {
+        const position = {
           x: base.position.x + offsetX,
           y: base.position.y,
           z: base.position.z + offsetZ,
         };
+        if (fitsTrajectory(entity.trajectory, base, entity.geometrySpec.halfSize, entity.animation,
+          new THREE.Vector3(position.x, position.y, position.z))) return position;
       }
     }
     return null;
@@ -318,6 +384,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       materialMode: source.materialMode,
       materialSettings: source.materialSettings,
       animation: { ...source.animation },
+      trajectory: source.trajectory,
     });
   }
 
@@ -331,6 +398,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       materialSettings: { ...entity.materialSettings },
       scale: validTransforms.get(id).scale.clone(),
       animation: { ...entity.animation },
+      trajectory: entity.trajectory,
     };
     return true;
   }
@@ -339,6 +407,16 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     const entity = getEntity(id);
     if (!entity || !copiedProperties) return false;
 
+    const base = validTransforms.get(id);
+    if (copiedProperties.trajectory?.enabled) {
+      const candidate = { ...base, scale: copiedProperties.scale };
+      const halfSize = entity.geometrySpec.halfSize;
+      baseMatrix.compose(base.position, baseQuaternion.setFromEuler(base.rotation), candidate.scale);
+      measureBounds(halfSize, baseMatrix);
+      if (!getPositionCorrection() || positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2 ||
+          !fitsTrajectory(copiedProperties.trajectory, candidate, halfSize, copiedProperties.animation)) return false;
+    }
+    cancelTrajectoryPreview(entity);
     restoreBase(entity);
     applyAppearance(entity, copiedProperties.color, copiedProperties.materialMode, copiedProperties.materialSettings);
     entity.mesh.scale.set(
@@ -347,7 +425,10 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       copiedProperties.scale.z,
     );
     entity.animation = { ...copiedProperties.animation };
+    entity.trajectory = copiedProperties.trajectory;
+    entity.trajectoryMotion = entity.trajectory?.enabled ? createTrajectoryMotion(entity.trajectory) : null;
     constrainEntityScale(entity);
+    applyVisualPose(entity);
     onSelectionChange(entity);
     onEntityChanged(serializeEntity(entity));
     return true;
@@ -434,6 +515,15 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     if (!getPositionCorrection()) {
       throw new Error('A geometria não cabe na cena com a escala e a rotação atuais.');
     }
+    const activeTrajectory = entity.trajectory?.enabled || entity.trajectoryPreview?.settings.enabled;
+    if (activeTrajectory && positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2) {
+      throw new Error('A geometria ultrapassaria os limites da cena na posição base da trajetória.');
+    }
+    const correctedPosition = previewOnly || activeTrajectory ? base.position : base.position.clone().add(positionCorrection);
+    requireTrajectoryFit(entity.trajectory, base, spec.halfSize, entity.animation, correctedPosition);
+    if (entity.trajectoryPreview?.settings) {
+      requireTrajectoryFit(entity.trajectoryPreview.settings, base, spec.halfSize, entity.animation, correctedPosition);
+    }
 
     const preview = entity.geometryPreview;
     const matchesPreview = preview?.spec.type === type &&
@@ -454,7 +544,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     if (entity.type !== type) entity.name = nextEntityName(type);
     entity.type = type;
     entity.geometrySpec = spec;
-    base.position.add(positionCorrection);
+    base.position.copy(correctedPosition);
     applyVisualPose(entity);
     if (entity.id === selectedEntityId) onSelectionChange(entity);
     onEntityChanged(serializeEntity(entity));
@@ -469,6 +559,11 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   function applyVisualPose(entity) {
     const halfSize = (entity.geometryPreview?.spec ?? entity.geometrySpec).halfSize;
     restoreBase(entity);
+    const motion = entity.trajectoryPreview === undefined ? entity.trajectoryMotion : entity.trajectoryPreview;
+    if (motion) {
+      applyTrajectoryPose(entity, motion);
+      return;
+    }
     if (entity.animation.enabled) {
       entity.mesh.rotation[entity.animation.axis] += entity.rotationPhase;
     }
@@ -480,10 +575,14 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
 
   function updateAnimations(delta) {
     for (const entity of entities.values()) {
-      if (!entity.animation.enabled || entity.editingTransform) continue;
-      const speed = entity.previewRotationSpeed ?? entity.animation.speed;
-      entity.rotationPhase = (entity.rotationPhase + THREE.MathUtils.degToRad(speed) * delta)
-        % (2 * Math.PI);
+      if (entity.editingTransform) continue;
+      const motion = entity.trajectoryPreview === undefined ? entity.trajectoryMotion : entity.trajectoryPreview;
+      if (!entity.animation.enabled && !motion) continue;
+      if (entity.animation.enabled) {
+        const speed = entity.previewRotationSpeed ?? entity.animation.speed;
+        entity.rotationPhase = (entity.rotationPhase + THREE.MathUtils.degToRad(speed) * delta) % (2 * Math.PI);
+      }
+      advanceTrajectory(motion, delta);
       applyVisualPose(entity);
     }
   }
@@ -516,11 +615,15 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   function setAnimation(entity, changes) {
     const animation = { ...entity.animation, ...changes };
     if (Object.keys(changes).every((key) => animation[key] === entity.animation[key])) return;
+    requireTrajectoryFit(entity.trajectory, validTransforms.get(entity.id), entity.geometrySpec.halfSize, animation);
+    requireTrajectoryFit(entity.trajectoryPreview?.settings, validTransforms.get(entity.id),
+      (entity.geometryPreview?.spec ?? entity.geometrySpec).halfSize, animation);
     if (animation.enabled !== entity.animation.enabled || animation.axis !== entity.animation.axis) {
       entity.rotationPhase = 0;
       restoreBase(entity);
     }
     entity.animation = animation;
+    applyVisualPose(entity);
     onEntityChanged(serializeEntity(entity));
   }
 
@@ -555,6 +658,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
         materialMode: snapshot.materialMode,
         materialSettings: snapshot.materialSettings,
         animation: snapshot.animation,
+        trajectory: snapshot.trajectory,
         geometryParameters: snapshot.geometryParameters,
       });
       const entity = getEntity(snapshot.id);
@@ -579,12 +683,17 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
         materialMode: snapshot.materialMode,
         materialSettings: snapshot.materialSettings,
         animation: snapshot.animation,
+        trajectory: snapshot.trajectory,
         geometryParameters: snapshot.geometryParameters,
         lastEditor: snapshot.lastEditor,
       });
       entity = getEntity(snapshot.id);
     } else {
       const base = validTransforms.get(entity.id);
+      cancelTrajectoryPreview(entity);
+      const trajectory = normalizeTrajectory(snapshot.trajectory);
+      const trajectoryChanged = !sameTrajectory(entity.trajectory, trajectory);
+      if (entity.trajectory?.enabled && !trajectory?.enabled) entity.rotationPhase = 0;
       cancelGeometryPreview(entity);
       const typeChanged = entity.type !== snapshot.type;
       const spec = describeGeometry(snapshot.type, snapshot.geometryParameters);
@@ -606,15 +715,16 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       entity.name = snapshot.name;
       applyAppearance(entity, snapshot.color, snapshot.materialMode, snapshot.materialSettings);
       entity.animation = { ...snapshot.animation };
+      entity.trajectory = trajectory;
+      if (trajectoryChanged) entity.trajectoryMotion = trajectory?.enabled ? createTrajectoryMotion(trajectory) : null;
       entity.lastEditor = snapshot.lastEditor ?? null;
       if (restart) {
         entity.mesh.position.set(snapshot.position.x, snapshot.position.y, snapshot.position.z);
         entity.mesh.rotation.set(snapshot.rotation.x, snapshot.rotation.y, snapshot.rotation.z);
         entity.mesh.scale.set(snapshot.scale.x, snapshot.scale.y, snapshot.scale.z);
         constrainEntity(entity);
-      } else if (geometryChanged) {
-        applyVisualPose(entity);
       }
+      applyVisualPose(entity);
     }
     return entity;
   }
@@ -670,6 +780,9 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     setAppearance,
     setMaterialSettings,
     setAnimation,
+    setTrajectory,
+    cancelTrajectoryPreview,
+    applyVisualPose,
     setMutationHandlers,
     serializeEntity: (id, pose) => {
       const entity = getEntity(id);
