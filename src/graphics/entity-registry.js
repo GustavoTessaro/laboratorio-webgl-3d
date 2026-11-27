@@ -748,6 +748,36 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     return Array.from(entities.values(), (entity) => serializeEntity(entity));
   }
 
+  function applyEntityBatch(snapshots, replace) {
+    const previousSelection = selectedEntityId;
+    const previousIds = new Set(entities.keys());
+    const previousEntity = getSelectedEntity();
+    const selectionHandler = onSelectionChange;
+    onSelectionChange = () => {};
+    try {
+      for (const snapshot of snapshots) {
+        if (!previousIds.has(snapshot.id)) applyEntitySnapshot(snapshot);
+      }
+    } catch (error) {
+      for (const id of entities.keys()) if (!previousIds.has(id)) removeEntity(id);
+      selectedEntityId = previousSelection;
+      throw error;
+    } finally {
+      onSelectionChange = selectionHandler;
+    }
+    if (replace) {
+      onSelectionChange = () => {};
+      try {
+        for (const id of previousIds) removeEntity(id);
+      } finally {
+        onSelectionChange = selectionHandler;
+      }
+    } else if (previousEntity) {
+      selectedEntityId = previousSelection;
+    }
+    if (replace || !previousEntity) onSelectionChange(getSelectedEntity());
+  }
+
   return {
     createEntity,
     duplicateEntity,
@@ -758,6 +788,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     getEntity,
     getEntities,
     count: () => entities.size,
+    applyEntityBatch,
     readBaseTransform(id, target) {
       const transform = validTransforms.get(id);
       if (!transform) return false;

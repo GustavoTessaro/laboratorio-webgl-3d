@@ -746,6 +746,23 @@ h1 {
   justify-self: start;
 }
 
+.environment-preview {
+  width: 100%;
+  display: block;
+  margin-block: 0.55rem;
+  border-radius: 0.5rem;
+  background: #141a24;
+  fill: none;
+  stroke: #8ea7ff;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.environment-preview-grid { stroke: #43516d; }
+.environment-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.environment-actions [hidden] { display: none; }
+
 .geometry-field,
 .geometry-description {
   color: var(--text-muted);

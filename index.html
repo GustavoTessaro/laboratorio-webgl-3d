@@ -292,6 +292,34 @@
             </button>
           </details>
 
+          <details class="control-category" data-environments>
+            <summary class="control-section-title">Ambientes e demonstrações</summary>
+            <label class="geometry-field">Ambiente
+              <select class="geometry-select" data-environment-select></select>
+            </label>
+            <svg class="environment-preview" viewBox="0 0 240 100" aria-hidden="true">
+              <path class="environment-preview-grid" d="M0 78h240M22 94h196M75 66l-40 32M120 66v32M165 66l40 32"/>
+              <path data-environment-icon></path>
+            </svg>
+            <p class="geometry-description" data-environment-description></p>
+            <p class="geometry-description" data-environment-objective></p>
+            <div class="environment-actions">
+              <button class="object-action" type="button" data-environment-add>Adicionar à cena</button>
+              <button class="object-action" type="button" data-environment-replace>Substituir a cena</button>
+              <button class="object-action" type="button" data-environment-frame disabled>Enquadrar demonstração</button>
+            </div>
+            <p class="geometry-description" role="status" aria-live="polite" data-environment-status></p>
+            <dialog class="collaboration-dialog" data-environment-dialog aria-labelledby="environment-replace-title">
+              <form method="dialog">
+                <h2 id="environment-replace-title">Substituir a cena?</h2>
+                <p>Os objetos e efeitos atuais serão removidos. A iluminação, o piso e a grade serão substituídos pelas configurações do ambiente.</p>
+                <div class="collaboration-dialog-actions">
+                  <button class="object-action" value="cancel" autofocus>Cancelar</button>
+                  <button class="object-action object-action--danger" value="replace">Confirmar substituição</button>
+                </div>
+              </form>
+            </dialog>
+          </details>
           <details class="control-category lighting-controls">
             <summary id="lighting-title" class="control-section-title">Iluminação</summary>
             <div data-lighting-groups></div>

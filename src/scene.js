@@ -347,6 +347,17 @@ export function createScene(container, {
     }
   }
 
+  function applyEnvironmentEntities(snapshots, replace) {
+    if (replace) transformEdit.cancel();
+    applyingRemoteState = true;
+    try {
+      entityRegistry.applyEntityBatch(snapshots, replace);
+      for (const { id, lastEditor } of snapshots) if (lastEditor) updateEntityPresence(id, null, lastEditor);
+    } finally {
+      applyingRemoteState = false;
+    }
+  }
+
   function removeSharedEntity(id) {
     if (transformEdit.entityId === id) transformEdit.cancel();
     if (transformControls.object?.userData.entityId === id) transformControls.detach();
@@ -517,6 +528,7 @@ export function createScene(container, {
     setCollaborationHandlers,
     getSharedEntities: entityRegistry.getSharedEntities,
     applySharedSnapshot,
+    applyEnvironmentEntities,
     applySharedEntity,
     removeSharedEntity,
     setEntityPresence: updateEntityPresence,
@@ -533,6 +545,8 @@ export function createScene(container, {
     setCameraPreset: (name) => changeCamera(cameraView.preset, name),
     frameSelected,
     frameAll: () => changeCamera(cameraView.frame, entityRegistry.getEntities().map(({ mesh }) => mesh)),
+    frameEntities: (ids) => changeCamera(cameraView.frame,
+      ids.map((id) => entityRegistry.getEntity(id)?.mesh).filter(Boolean)),
     resetCamera: () => changeCamera(cameraView.reset),
     setCoordinateHelper: coordinates.setVisible,
     cancelTransformEdit: transformEdit.cancel,

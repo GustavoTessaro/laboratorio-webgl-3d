@@ -6,9 +6,17 @@ public sealed class RoomDbContext(DbContextOptions<RoomDbContext> options) : DbC
 {
     public DbSet<RoomRecord> Rooms => Set<RoomRecord>();
     public DbSet<RoomEntityRecord> RoomEntities => Set<RoomEntityRecord>();
+    public DbSet<EnvironmentReceipt> EnvironmentReceipts => Set<EnvironmentReceipt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<EnvironmentReceipt>(entity =>
+        {
+            entity.ToTable("EnvironmentReceipts");
+            entity.HasKey(item => item.OperationId);
+            entity.Property(item => item.EnvironmentId).HasMaxLength(32).IsRequired();
+            entity.Property(item => item.Mode).HasMaxLength(7).IsRequired();
+        });
         modelBuilder.Entity<RoomRecord>(entity =>
         {
             entity.ToTable("Rooms");
@@ -40,6 +48,14 @@ public sealed class RoomDbContext(DbContextOptions<RoomDbContext> options) : DbC
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
+}
+
+public sealed class EnvironmentReceipt
+{
+    public Guid OperationId { get; set; }
+    public string EnvironmentId { get; set; } = string.Empty;
+    public string Mode { get; set; } = string.Empty;
+    public int CatalogVersion { get; set; }
 }
 
 public sealed class RoomRecord

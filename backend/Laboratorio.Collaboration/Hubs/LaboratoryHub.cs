@@ -5,8 +5,34 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Laboratorio.Collaboration.Hubs;
 
-public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService persistence) : Hub
+public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService persistence, RoomInvocationOrder order) : Hub
 {
+    public async Task<string[]> ApplyEnvironment(EnvironmentCommandDto command)
+    {
+        try
+        {
+            var change = await persistence.ApplyEnvironmentAsync(Context.ConnectionId, command);
+            if (change is not null)
+            {
+                try
+                {
+                    await Clients.Group(CollaborationProtocol.RoomId).SendAsync("EnvironmentApplied", change);
+                }
+                catch
+                {
+                    persistence.ReconcileEnvironmentDelivery();
+                    throw new HubException("Aguarde a reconciliação da aplicação do ambiente.");
+                }
+            }
+            return change?.Entities.Select(entity => entity.Id).ToArray() ?? [];
+        }
+        catch (Exception error) when (error is RoomPersistenceException or InvalidOperationException)
+        {
+            var rejected = error is InvalidOperationException ||
+                (error is RoomPersistenceException { RequiresReconciliation: false } && persistence.IsReady);
+            throw new HubException(rejected ? $"Ambiente rejeitado. {error.Message}" : error.Message);
+        }
+    }
     public async Task<RoomSnapshotDto> JoinRoom(
         string displayName,
         int protocolVersion,
@@ -174,6 +200,14 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        await order.EnterAsync();
+        try { await NotifyDepartureAsync(); }
+        finally { order.Exit(); }
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    private async Task NotifyDepartureAsync()
+    {
         var discardedPreviews = new HashSet<string>(StringComparer.Ordinal);
         var departure = store.Leave(Context.ConnectionId, id => { discardedPreviews.Add(id); });
         var participant = departure.Participant;
@@ -194,7 +228,6 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
                     string.Empty));
         }
 
-        await base.OnDisconnectedAsync(exception);
     }
 
     internal static Task BroadcastConfirmedAsync(

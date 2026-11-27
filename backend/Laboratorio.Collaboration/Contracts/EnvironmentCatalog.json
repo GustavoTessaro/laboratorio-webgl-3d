@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "environments": [
+    {
+      "id": "geometry-lab",
+      "name": "Laboratório de geometrias",
+      "description": "Quinze formas em três fileiras, das primitivas às malhas modeladas.",
+      "objective": "Compare topologia, dimensões e subdivisões no inspetor.",
+      "icon": "geometry",
+      "camera": "isometric",
+      "lighting": {"environment":{"floorVisible":true,"gridVisible":false,"floorColor":"#293549"}},
+      "objects": [
+        {"name":"Cubo","type":"box","color":"#62a9fa","materialMode":"solid","position":{"x":-6,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Esfera","type":"sphere","color":"#66cfc1","materialMode":"solid","position":{"x":-3,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Pirâmide","type":"pyramid","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Toroide","type":"torus","color":"#c7a4fe","materialMode":"solid","position":{"x":3,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Cilindro","type":"cylinder","color":"#f38a91","materialMode":"solid","position":{"x":6,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Cone","type":"cone","color":"#62a9fa","materialMode":"solid","position":{"x":-6,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Plano","type":"plane","color":"#66cfc1","materialMode":"solid","position":{"x":-3,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Cápsula","type":"capsule","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Tetraedro","type":"tetrahedron","color":"#c7a4fe","materialMode":"solid","position":{"x":3,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Octaedro","type":"octahedron","color":"#f38a91","materialMode":"solid","position":{"x":6,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Dodecaedro","type":"dodecahedron","color":"#62a9fa","materialMode":"solid","position":{"x":-6,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Icosaedro","type":"icosahedron","color":"#66cfc1","materialMode":"solid","position":{"x":-3,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Nó toroidal","type":"torusKnot","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Revolução","type":"lathe","color":"#c7a4fe","materialMode":"solid","position":{"x":3,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}},
+        {"name":"Extrusão","type":"extrude","color":"#f38a91","materialMode":"solid","position":{"x":6,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45}}
+      ]
+    },
+    {
+      "id": "material-gallery",
+      "name": "Galeria de materiais e texturas",
+      "description": "Três modelos de material, oito texturas e esferas com diferentes acabamentos.",
+      "objective": "Compare transparência, rugosidade e metalicidade sob a mesma luz.",
+      "icon": "materials",
+      "camera": "isometric",
+      "lighting": {"environment":{"floorVisible":true,"gridVisible":false,"floorColor":"#293549"}},
+      "objects": [
+        {"name":"Basic","type":"sphere","color":"#fbb86b","materialMode":"solid","position":{"x":-6,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"kind":"basic"}},
+        {"name":"Phong","type":"sphere","color":"#fbb86b","materialMode":"solid","position":{"x":-3,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"kind":"phong"}},
+        {"name":"Standard","type":"sphere","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"kind":"standard","roughness":0.15}},
+        {"name":"Transparente","type":"sphere","color":"#fbb86b","materialMode":"solid","position":{"x":3,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"kind":"standard","transparent":true,"opacity":0.4}},
+        {"name":"Metal rugoso","type":"sphere","color":"#fbb86b","materialMode":"solid","position":{"x":6,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"kind":"standard","roughness":0.85,"metalness":0.75}},
+        {"name":"Madeira","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":-6,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"wood"}},
+        {"name":"Tijolos","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":-3,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"brick"}},
+        {"name":"Mármore","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":0,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"marble"}},
+        {"name":"Pedra","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":3,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"stone"}},
+        {"name":"Metal","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":6,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"metal"}},
+        {"name":"Concreto","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":-6,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"concrete"}},
+        {"name":"Tecido","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":-3,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"fabric"}},
+        {"name":"Quadriculado UV","type":"box","color":"#ffffff","materialMode":"solid","position":{"x":0,"y":1.2,"z":-3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"textureId":"uv-grid"}}
+      ]
+    },
+    {
+      "id": "lighting-studio",
+      "name": "Estúdio de iluminação",
+      "description": "Cinco fontes de luz iluminam uma bancada com superfícies diferentes.",
+      "objective": "Desligue uma fonte por vez para comparar cor, direção e sombras.",
+      "icon": "lighting",
+      "camera": "isometric",
+      "lighting": {"environment":{"floorVisible":true,"gridVisible":false,"floorColor":"#293549"},"ambient":{"enabled":true,"intensity":0.2},"hemisphere":{"intensity":1.3},"directional":{"intensity":1.9},"point":{"enabled":true,"intensity":24,"color":"#ff9c78","x":-3,"y":3,"z":2},"spot":{"enabled":true,"intensity":45,"color":"#a9c7ff","x":3,"y":5,"z":3,"targetX":2}},
+      "objects": [
+        {"name":"Esfera metálica","type":"sphere","color":"#62a9fa","materialMode":"solid","position":{"x":-3,"y":1.05,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"metalness":0.55,"roughness":0.25}},
+        {"name":"Cubo fosco","type":"box","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":0.77,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"roughness":0.85}},
+        {"name":"Forma Phong","type":"torusKnot","color":"#c7a4fe","materialMode":"solid","position":{"x":3,"y":1.25,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"materialSettings":{"kind":"phong","shininess":60}}
+      ]
+    },
+    {
+      "id": "motion-lab",
+      "name": "Laboratório de movimento",
+      "description": "Cinco objetos percorrem curvas enquanto giram sobre si mesmos.",
+      "objective": "Compare pose visual e transformação base. Experimente inverter o sentido.",
+      "icon": "motion",
+      "camera": "isometric",
+      "lighting": {"environment":{"floorVisible":true,"gridVisible":false,"floorColor":"#293549"}},
+      "objects": [
+        {"name":"Circular","type":"box","color":"#62a9fa","materialMode":"solid","position":{"x":-6.5,"y":2.8,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.65,"y":0.65,"z":0.65},"animation":{"enabled":true,"axis":"y","speed":50},"trajectory":{"type":"circle","enabled":true,"duration":5,"mode":"loop","radius":0.85,"radiusB":0.55,"height":1.4,"orient":false}},
+        {"name":"Elíptica","type":"sphere","color":"#66cfc1","materialMode":"solid","position":{"x":-3.25,"y":2.8,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.65,"y":0.65,"z":0.65},"animation":{"enabled":true,"axis":"y","speed":50},"trajectory":{"type":"ellipse","enabled":true,"duration":6,"mode":"loop","radius":0.85,"radiusB":0.55,"height":1.4,"orient":false}},
+        {"name":"Helicoidal","type":"cone","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":2.8,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.65,"y":0.65,"z":0.65},"animation":{"enabled":true,"axis":"y","speed":50},"trajectory":{"type":"helix","enabled":true,"duration":7,"mode":"pingpong","radius":0.85,"radiusB":0.55,"height":1.4,"orient":false}},
+        {"name":"Bézier","type":"octahedron","color":"#c7a4fe","materialMode":"solid","position":{"x":3.25,"y":2.8,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.65,"y":0.65,"z":0.65},"animation":{"enabled":true,"axis":"y","speed":50},"trajectory":{"type":"bezier","enabled":true,"duration":8,"mode":"pingpong","radius":0.85,"radiusB":0.55,"height":1.4,"orient":true}},
+        {"name":"Catmull-Rom","type":"icosahedron","color":"#f38a91","materialMode":"solid","position":{"x":6.5,"y":2.8,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.65,"y":0.65,"z":0.65},"animation":{"enabled":true,"axis":"y","speed":50},"trajectory":{"type":"catmull","enabled":true,"duration":9,"mode":"pingpong","radius":0.85,"radiusB":0.55,"height":1.4,"orient":true}}
+      ]
+    },
+    {
+      "id": "particle-fountain",
+      "name": "Fonte de partículas",
+      "description": "Um emissor lança pontos luminosos acima de uma bacia texturizada.",
+      "objective": "Ajuste dispersão, gravidade e tempo de vida para observar a reciclagem.",
+      "icon": "particles",
+      "camera": "isometric",
+      "lighting": {"environment":{"floorVisible":true,"gridVisible":false,"floorColor":"#293549"}},
+      "particles": [{"type":"fountain","count":1600,"y":0.6,"area":0.35,"dispersion":0.55,"gravity":9.8,"life":2.2}],
+      "objects": [
+        {"name":"Bacia de pedra","type":"cylinder","color":"#adc1d3","materialMode":"solid","position":{"x":0,"y":0.25,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"radiusTop":2.4,"radiusBottom":2.05,"height":0.45},"materialSettings":{"textureId":"stone"}},
+        {"name":"Bocal","type":"torus","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":0.54,"z":0},"rotation":{"x":1.5707963267948966,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"radius":0.34,"tube":0.08}}
+      ]
+    },
+    {
+      "id": "modeling-workshop",
+      "name": "Oficina de modelagem",
+      "description": "Quatro perfis de revolução e seis contornos de extrusão lado a lado.",
+      "objective": "Edite pontos e compare o efeito de raios, profundidade e chanfros.",
+      "icon": "modeling",
+      "camera": "isometric",
+      "lighting": {"environment":{"floorVisible":true,"gridVisible":false,"floorColor":"#293549"}},
+      "objects": [
+        {"name":"Vaso","type":"lathe","color":"#62a9fa","materialMode":"solid","position":{"x":-6,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":7,"x0":0,"y0":0,"x1":4200,"y1":500,"x2":6300,"y2":3200,"x3":7200,"y3":7000,"x4":5500,"y4":11200,"x5":3600,"y5":15500,"x6":4800,"y6":17200}},
+        {"name":"Garrafa","type":"lathe","color":"#66cfc1","materialMode":"solid","position":{"x":-3,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":8,"x0":0,"y0":0,"x1":5000,"y1":400,"x2":5800,"y2":2000,"x3":5800,"y3":11500,"x4":4600,"y4":13800,"x5":2000,"y5":15200,"x6":1900,"y6":19400,"x7":2300,"y7":20000}},
+        {"name":"Taça","type":"lathe","color":"#fbb86b","materialMode":"solid","position":{"x":0,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":8,"x0":0,"y0":0,"x1":4800,"y1":400,"x2":4900,"y2":1200,"x3":1500,"y3":2000,"x4":1000,"y4":6400,"x5":3000,"y5":7600,"x6":5200,"y6":10200,"x7":6200,"y7":13800}},
+        {"name":"Peão de xadrez","type":"lathe","color":"#c7a4fe","materialMode":"solid","position":{"x":3,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":12,"x0":0,"y0":0,"x1":5200,"y1":400,"x2":5200,"y2":1600,"x3":4500,"y3":2800,"x4":3000,"y4":3800,"x5":1900,"y5":8800,"x6":3200,"y6":9700,"x7":2300,"y7":10800,"x8":2800,"y8":12300,"x9":2900,"y9":14000,"x10":1900,"y10":15600,"x11":0,"y11":16300}},
+        {"name":"Retângulo","type":"extrude","color":"#62a9fa","materialMode":"solid","position":{"x":6,"y":1.2,"z":3},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":4,"x0":-9000,"y0":-5500,"x1":9000,"y1":-5500,"x2":9000,"y2":5500,"x3":-9000,"y3":5500,"bevelEnabled":1}},
+        {"name":"Triângulo","type":"extrude","color":"#66cfc1","materialMode":"solid","position":{"x":-6,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":3,"x0":-8500,"y0":-5500,"x1":8500,"y1":-5500,"x2":0,"y2":9000}},
+        {"name":"Hexágono","type":"extrude","color":"#fbb86b","materialMode":"solid","position":{"x":-3,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":6,"x0":10000,"y0":0,"x1":5000,"y1":8660,"x2":-5000,"y2":8660,"x3":-10000,"y3":0,"x4":-5000,"y4":-8660,"x5":5000,"y5":-8660}},
+        {"name":"Estrela","type":"extrude","color":"#c7a4fe","materialMode":"solid","position":{"x":0,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":10,"x0":0,"y0":10000,"x1":-3056,"y1":4207,"x2":-9511,"y2":3090,"x3":-4945,"y3":-1607,"x4":-5878,"y4":-8090,"x5":0,"y5":-5200,"x6":5878,"y6":-8090,"x7":4945,"y7":-1607,"x8":9511,"y8":3090,"x9":3056,"y9":4207}},
+        {"name":"Coração","type":"extrude","color":"#f38a91","materialMode":"solid","position":{"x":3,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":12,"x0":0,"y0":4200,"x1":3800,"y1":7600,"x2":8000,"y2":7300,"x3":10000,"y3":4000,"x4":8800,"y4":-100,"x5":5300,"y5":-4200,"x6":0,"y6":-9000,"x7":-5300,"y7":-4200,"x8":-8800,"y8":-100,"x9":-10000,"y9":4000,"x10":-8000,"y10":7300,"x11":-3800,"y11":7600,"rounded":1}},
+        {"name":"Engrenagem estilizada","type":"extrude","color":"#62a9fa","materialMode":"solid","position":{"x":6,"y":1.2,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1},"animation":{"enabled":false,"axis":"y","speed":45},"geometryParameters":{"pointCount":24,"x0":7600,"y0":0,"x1":9659,"y1":2588,"x2":8660,"y2":5000,"x3":5374,"y3":5374,"x4":3800,"y4":6582,"x5":2588,"y5":9659,"x6":0,"y6":10000,"x7":-1967,"y7":7341,"x8":-3800,"y8":6582,"x9":-7071,"y9":7071,"x10":-8660,"y10":5000,"x11":-7341,"y11":1967,"x12":-7600,"y12":0,"x13":-9659,"y13":-2588,"x14":-8660,"y14":-5000,"x15":-5374,"y15":-5374,"x16":-3800,"y16":-6582,"x17":-2588,"y17":-9659,"x18":0,"y18":-10000,"x19":1967,"y19":-7341,"x20":3800,"y20":-6582,"x21":7071,"y21":-7071,"x22":8660,"y22":-5000,"x23":7341,"y23":-1967}}
+      ]
+    },
+    {
+      "id": "empty-scene",
+      "name": "Cena vazia",
+      "description": "Um espaço de trabalho sem objetos nem partículas.",
+      "objective": "Monte uma cena do zero com a iluminação padrão.",
+      "icon": "empty",
+      "camera": "isometric",
+      "lighting": {},
+      "replaceOnly": true,
+      "objects": []
+    }
+  ]
+}

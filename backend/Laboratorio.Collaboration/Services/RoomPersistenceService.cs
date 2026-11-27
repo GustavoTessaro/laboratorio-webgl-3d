@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Laboratorio.Collaboration.Services;
 
-public sealed class RoomPersistenceService(
+public sealed partial class RoomPersistenceService(
     IDbContextFactory<RoomDbContext> contextFactory,
     RoomStateStore store,
     ILogger<RoomPersistenceService> logger,
@@ -150,6 +150,7 @@ public sealed class RoomPersistenceService(
             _pendingDeletes.Clear();
             _pendingLockReleases.Clear();
             _pendingEntityReconciliations.Clear();
+            _reconcileEnvironment = false;
             _isReady = true;
         }
         finally
@@ -198,6 +199,13 @@ public sealed class RoomPersistenceService(
     {
         if (hubContext is null)
         {
+            return;
+        }
+
+        if (_reconcileEnvironment)
+        {
+            await hubContext.Clients.Group(CollaborationProtocol.RoomId)
+                .SendAsync("EnvironmentReconciled", store.GetSnapshot(), cancellationToken);
             return;
         }
 

@@ -752,6 +752,108 @@ public sealed class RoomPersistenceServiceTests
             CollaborationProtocol.Version, [])).Entities));
     }
 
+    [Fact]
+    public async Task EnvironmentCatalogAppliesEachPresetAndEnforcesActiveLocksAndCapacity()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var factory = CreateFactory(connection);
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        var original = CreateBox();
+        await SeedLegacyEntityAsync(factory, original, "20261127011417_AddEntityTrajectory");
+        await StartAndWaitAsync(service);
+        Assert.Equal(original, Assert.Single((await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, [])).Entities));
+        await service.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
+        var replace = new EnvironmentCommandDto("geometry-lab", "replace", Guid.NewGuid(), 1);
+        Assert.True(store.AcquireLock("bia", original.Id).Granted);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyEnvironmentAsync("ana", replace));
+        Assert.Equal(original, store.GetEntity(original.Id));
+        Assert.True(store.ReleaseLock("bia", original.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyEnvironmentAsync("outsider", replace));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyEnvironmentAsync("ana", replace with { CatalogVersion = 99 }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyEnvironmentAsync("ana",
+            replace with { EnvironmentId = "empty-scene", Mode = "add" }));
+        foreach (var (id, count) in new (string, int)[]
+        {
+            ("geometry-lab", 15), ("material-gallery", 13), ("lighting-studio", 3),
+            ("motion-lab", 5), ("particle-fountain", 2), ("modeling-workshop", 10), ("empty-scene", 0)
+        })
+        {
+            var change = await service.ApplyEnvironmentAsync("ana", replace with { EnvironmentId = id, OperationId = Guid.NewGuid() });
+            Assert.Equal(count, change!.Entities.Length);
+            Assert.Equal(count, store.GetSnapshot().Entities.Count);
+            Assert.InRange(JsonSerializer.SerializeToUtf8Bytes(change).Length, 1, 256 * 1024);
+        }
+        for (var i = 0; i < 6; i++)
+            await service.ApplyEnvironmentAsync("ana", replace with { Mode = "add", OperationId = Guid.NewGuid() });
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ApplyEnvironmentAsync("ana", replace with { Mode = "add", OperationId = Guid.NewGuid() }));
+        Assert.Equal(90, store.GetSnapshot().Entities.Count);
+    }
+
+    [Fact]
+    public async Task EnvironmentReceiptDeduplicatesAfterAmbiguousAckAndRestart()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var factory = CreateFactory(connection, interceptor);
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = CreateBox();
+        var initial = await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, [original]);
+        var command = new EnvironmentCommandDto("particle-fountain", "add", Guid.NewGuid(), 1);
+        var commits = interceptor.CommitCount;
+        interceptor.ThrowAfterNextCommit();
+        var batch = await service.ApplyEnvironmentAsync("ana", command);
+        Assert.NotNull(batch);
+        Assert.Equal(initial.Lighting, batch.Lighting);
+        Assert.Equal(3, store.GetSnapshot().Entities.Count);
+        Assert.Single(batch.Particles.Effects.EnumerateObject());
+        var repeats = await Task.WhenAll(service.ApplyEnvironmentAsync("ana", command), service.ApplyEnvironmentAsync("ana", command));
+        Assert.All(repeats, Assert.Null);
+        Assert.Equal(commits + 1, interceptor.CommitCount);
+        var restarted = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restarted);
+        var restored = await restarted.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
+        Assert.Equal(3, restored.Entities.Count);
+        Assert.True(JsonElement.DeepEquals(batch.Particles.Effects, restored.Particles.Effects));
+        Assert.Null(await restarted.ApplyEnvironmentAsync("bia", command));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.ApplyEnvironmentAsync("bia", command with { Mode = "replace" }));
+        Assert.Equal(commits + 1, interceptor.CommitCount);
+    }
+
+    [Fact]
+    public async Task EnvironmentWriteRejectsParticleOverflowAndRollsBackWholeReplacement()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var factory = CreateFactory(connection);
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = CreateBox();
+        await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, [original]);
+        for (var i = 0; i < 4; i++)
+            await service.UpdateParticlesAsync("ana", new ParticleCommandDto("add", Guid.NewGuid().ToString(),
+                JsonSerializer.SerializeToElement(new { type = "fountain" })));
+        var fountain = new EnvironmentCommandDto("particle-fountain", "add", Guid.NewGuid(), 1);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyEnvironmentAsync("ana", fountain));
+        Assert.Single(store.GetSnapshot().Entities);
+
+        await using (var db = factory.CreateDbContext())
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER reject_environment_receipt BEFORE INSERT ON EnvironmentReceipts
+                BEGIN SELECT RAISE(ABORT, 'simulated failed batch'); END;
+                """);
+        await Assert.ThrowsAsync<RoomPersistenceException>(() => service.ApplyEnvironmentAsync("ana",
+            fountain with { Mode = "replace" }));
+        Assert.Equal(original, Assert.Single(store.GetSnapshot().Entities));
+        Assert.Equal(4, store.GetParticles().Effects.EnumerateObject().Count());
+        await using var verification = factory.CreateDbContext();
+        Assert.Equal(original.Id, (await verification.RoomEntities.SingleAsync()).Id);
+        Assert.Empty(verification.EnvironmentReceipts);
+    }
+
     private static EntityDto CreateBox() => new(
         Guid.NewGuid().ToString(),
         "Cubo",

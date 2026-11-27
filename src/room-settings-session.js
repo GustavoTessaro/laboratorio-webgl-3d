@@ -57,6 +57,15 @@ export function createRoomSettingsSession({ initial, change, equal, stateValue, 
   }
 
   return {
+    get confirmed() { return confirmed; },
+    get shared() { return remote; },
+    get pending() { return sending || queued.length > 0; },
+    replaceLocal(settings, preservePreview = false) {
+      if (remote) throw new Error('A sala compartilhada exige confirmação do servidor.');
+      if (!preservePreview) preview = null;
+      confirmed = settings;
+      refresh();
+    },
     accept(state) { accept(state); },
     resume(state) {
       remote = online = true;

@@ -17,6 +17,26 @@ namespace Laboratorio.Collaboration.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
 
+            modelBuilder.Entity("Laboratorio.Collaboration.Data.EnvironmentReceipt", b =>
+                {
+                    b.Property<Guid>("OperationId")
+                        .ValueGeneratedOnAdd();
+
+                    b.Property<int>("CatalogVersion");
+
+                    b.Property<string>("EnvironmentId")
+                        .IsRequired()
+                        .HasMaxLength(32);
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(7);
+
+                    b.HasKey("OperationId");
+
+                    b.ToTable("EnvironmentReceipts", (string)null);
+                });
+
             modelBuilder.Entity("Laboratorio.Collaboration.Data.RoomEntityRecord", b =>
                 {
                     b.Property<string>("RoomId")

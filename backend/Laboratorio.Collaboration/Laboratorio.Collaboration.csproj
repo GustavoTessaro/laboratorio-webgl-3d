@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Contracts/GeometryCatalog.json" LogicalName="GeometryCatalog.json" />
+    <EmbeddedResource Include="Contracts/EnvironmentCatalog.json" LogicalName="EnvironmentCatalog.json" />
     <EmbeddedResource Include="Contracts/TextureCatalog.json" LogicalName="TextureCatalog.json" />
     <EmbeddedResource Include="Contracts/LightingCatalog.json" LogicalName="LightingCatalog.json" />
     <EmbeddedResource Include="Contracts/ParticleCatalog.json" LogicalName="ParticleCatalog.json" />

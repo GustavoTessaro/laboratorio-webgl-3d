@@ -2,6 +2,7 @@ using Laboratorio.Collaboration.Hubs;
 using Laboratorio.Collaboration.Data;
 using Laboratorio.Collaboration.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 var frontendOrigins = builder.Configuration
@@ -37,7 +38,9 @@ builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 builder.Services.AddSignalR(options =>
 {
     options.MaximumReceiveMessageSize = 256 * 1024;
+    options.AddFilter<RoomInvocationOrder>();
 });
+builder.Services.AddSingleton<RoomInvocationOrder>();
 builder.Services.AddSingleton<RoomStateStore>();
 var persistenceProvider = builder.Configuration["Persistence:Provider"]
     ?? (builder.Environment.IsDevelopment() ? "Sqlite" : "SqlServer");

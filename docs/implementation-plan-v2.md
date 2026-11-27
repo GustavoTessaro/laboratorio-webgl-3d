@@ -46,6 +46,7 @@
 - [x] V2-09 implementada e validada com testes automatizados e Chrome headless. Medições em hardware real permanecem pendentes.
 - [x] V2-10 implementada com cinco trajetórias, duas sessões colaborativas locais e recuperação em SQLite.
 - [x] V2-11 implementada com revolução e extrusão, dez modelos editáveis e validação compartilhada do catálogo.
+- [x] V2-12 implementada com sete demonstrações e aplicação em lote no modo local e colaborativo.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
 - [x] A fonte de partículas da V2-08 é o recurso avançado demonstrável.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
@@ -237,3 +238,20 @@ O protocolo passa para **5**, de modo que participantes na mesma sala possam obs
 - [x] Chrome headless com WebGL e SwiftShader verificou os dez modelos, edição, inclusão e remoção de pontos, prévia SVG e 3D, revolução de 150°, chanfro, os três materiais, textura de madeira, chão receptor, projeções, gizmo por eventos de ponteiro, inspetor, trajetória e rotação. Em duas sessões, uma edição contínua produziu uma confirmação e o reinício recuperou os descritores de ambas as formas. O painel permaneceu dentro da viewport móvel de 390 px.
 - [x] A cena de teste com duas malhas, textura, chão receptor, rotação e trajetória na extrusão com 24 pontos, 32 intervalos de profundidade e seis segmentos de chanfro registrou 6.468 vértices nessa malha e mediana de 45,0 ms entre 30 quadros, em SwiftShader. A medição cobre o cenário completo com renderização por software.
 - [ ] Verificar a edição por toque e medir em GPU real com várias geometrias no orçamento máximo.
+
+## V2-12 — Ambientes e demonstrações
+
+### Implementação e decisões
+
+- O catálogo compartilhado versão 1 define laboratório de geometrias, galeria de materiais e texturas, estúdio de iluminação, laboratório de movimento, fonte de partículas, oficina de modelagem e cena vazia. Todos usam descritores comuns. As miniaturas são desenhos SVG próprios embutidos. Enquadrar usa a câmera do participante e conserva sua projeção.
+- Adicionar mantém os objetos, os efeitos e a iluminação atuais. Substituir exige confirmação e troca objetos, efeitos e configuração de ambiente. Cena vazia oferece somente substituição. O modo local valida os descritores e os orçamentos antes de preparar as malhas. Em caso de falha ao construir o lote, os recursos preparados são liberados e a seleção anterior é preservada.
+- A sala aceita somente identificador de ambiente, modo, versão do catálogo e UUID de operação. O servidor resolve o catálogo de confiança, exige ingresso na sala e usa os validadores existentes. Valem os limites de 100 objetos, quatro efeitos e 12.000 partículas. O maior lote de catálogo tem 15 entidades. Adicionar mantém os bloqueios existentes e substituir é rejeitado enquanto houver bloqueio ativo, inclusive do próprio solicitante. A publicação das invocações da sala é serializada com ingresso, saída e expiração de bloqueios para evitar intercalar notificações antigas com a troca.
+- Uma transação do EF confirma o lote e seu recibo. Após a confirmação, o servidor publica um único evento com o lote e as revisões de iluminação e partículas, sem criar nem excluir objetos individualmente pelo hub. Uma nova tentativa com o mesmo UUID confirmado dispensa gravação e publicação. Se o retorno da gravação for ambíguo, o serviço verifica o recibo e, quando a verificação também falha, retoma pelo mecanismo de reconciliação com um snapshot integral. Após perder a confirmação, o navegador oferece repetir o mesmo ambiente e modo com o UUID original.
+- O protocolo passa para 8 porque o evento de lote precisa ser interpretado por todos os participantes. A migration aditiva `AddEnvironmentReceipts` cria somente a tabela de recibos. A tabela não vincula os objetos ao catálogo. Para futura publicação, validar o [script idempotente do SQL Server](sql/v2-12-add-environment-receipts.sql) em base de teste, aplicar a migration antes do backend e publicar o frontend junto ao backend compatível. Os recibos precisam permanecer disponíveis para garantir a deduplicação após reinício.
+
+### Resultados e pendências
+
+- [x] 63 testes JavaScript e 49 testes .NET aprovados. Build .NET sem avisos. Build Vite com avisos de anotações do SignalR e tamanho do bundle.
+- [x] A suíte SQLite validou lote único, bloqueios, rejeição por orçamento, rollback, confirmação perdida, recuperação da composição e deduplicação após reiniciar. O SQL do SQL Server foi gerado localmente e o EF confirmou o modelo.
+- [x] Chrome headless com WebGL e SwiftShader confirmou os sete ambientes, cancelamento, aplicação local e compartilhada, enquadramento com câmeras independentes, materiais e textura, luzes, movimento, partículas e edição compartilhada de um objeto do catálogo. Confirmou também a rejeição sob bloqueio, a viewport de 390 px, a reconexão do navegador após reiniciar o backend e a recuperação em SQLite. A contagem do renderer permaneceu em 14 geometrias antes e após três substituições da oficina. Esse contador registra recursos contabilizados pelo Three.js durante o teste.
+- [ ] Executar a migration em um SQL Server de teste e medir carregamento e uso de recursos em GPU real. A serialização da sala segue a arquitetura atual de instância única.

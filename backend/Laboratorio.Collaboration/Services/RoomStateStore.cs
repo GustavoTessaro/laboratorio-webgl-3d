@@ -18,6 +18,7 @@ public sealed class RoomStateStore
     private readonly Dictionary<string, EntityLock> _locks = new(StringComparer.Ordinal);
     private readonly TimeProvider _timeProvider;
     private bool _initialized;
+    private bool _replacingEnvironment;
     private RoomLightingDto _lighting = LightingSettings.Default;
     private RoomParticlesDto _particles = ParticleSettings.Default;
 
@@ -214,6 +215,8 @@ public sealed class RoomStateStore
     {
         lock (_sync)
         {
+            if (_replacingEnvironment)
+                return new LockResultDto(false, Reason: "A substituição da cena está em andamento.");
             if (!_participants.TryGetValue(connectionId, out var participant))
             {
                 return new LockResultDto(false, Reason: "Entre na sala antes de editar.");
@@ -352,6 +355,66 @@ public sealed class RoomStateStore
     }
 
     public static void ValidateEntity(EntityDto entity) => CanonicalizeEntity(entity);
+
+    internal EnvironmentChangeDto PrepareEnvironment(string connectionId, EnvironmentCommandDto command,
+        EnvironmentCatalog.Preset preset)
+    {
+        lock (_sync)
+        {
+            RequireParticipant(connectionId);
+            var replace = command.Mode == "replace";
+            if (replace && _locks.Values.Any(item => item.ExpiresAt > _timeProvider.GetUtcNow()))
+                throw new InvalidOperationException("Conclua as edições bloqueadas antes de substituir a cena.");
+            if ((replace ? 0 : _entities.Count) + preset.Objects.Length > MaximumEntities)
+                throw new InvalidOperationException($"Limite de {MaximumEntities} objetos por sala.");
+
+            var ids = _entities.Keys.ToHashSet();
+            ids.UnionWith(_particles.Effects.EnumerateObject().Select(effect => effect.Name));
+            var objects = preset.Objects.Select(template =>
+            {
+                string id;
+                do { id = Guid.NewGuid().ToString(); } while (!ids.Add(id));
+                return CanonicalizeEntity(template with { Id = id, LastEditor = _participants[connectionId].Name });
+            }).ToArray();
+            var lighting = replace ? LightingSettings.Default.Settings : _lighting.Settings;
+            var effects = replace ? ParticleSettings.Default.Effects : _particles.Effects;
+            if (replace && preset.Lighting is not null)
+                foreach (var (group, patch) in preset.Lighting)
+                    lighting = LightingSettings.Apply(lighting, group, patch);
+            foreach (var patch in preset.Particles ?? [])
+            {
+                string id;
+                do { id = Guid.NewGuid().ToString(); } while (!ids.Add(id));
+                effects = ParticleSettings.Apply(effects, new ParticleCommandDto("add", id, patch));
+            }
+            var nextLighting = System.Text.Json.JsonElement.DeepEquals(lighting, _lighting.Settings)
+                ? _lighting : new RoomLightingDto(checked(_lighting.Revision + 1), lighting);
+            var nextParticles = System.Text.Json.JsonElement.DeepEquals(effects, _particles.Effects)
+                ? _particles : new RoomParticlesDto(checked(_particles.Revision + 1), effects);
+            _replacingEnvironment = replace;
+            return new EnvironmentChangeDto(command.OperationId, command.Mode, objects, nextLighting, nextParticles);
+        }
+    }
+
+    internal void CompleteEnvironment(EnvironmentChangeDto change)
+    {
+        lock (_sync)
+        {
+            if (change.Mode == "replace")
+            {
+                _locks.Clear();
+                _entities.Clear();
+            }
+            foreach (var entity in change.Entities) _entities.Add(entity.Id, entity);
+            _lighting = change.Lighting;
+            _particles = change.Particles;
+        }
+    }
+
+    internal void EndEnvironment()
+    {
+        lock (_sync) _replacingEnvironment = false;
+    }
 
     private static (GeometryParametersDto? Geometry, TrajectoryDto? Trajectory) ValidateSpatialSettings(EntityDto entity)
     {

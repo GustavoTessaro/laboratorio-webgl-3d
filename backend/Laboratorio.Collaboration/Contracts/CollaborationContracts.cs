@@ -106,8 +106,12 @@ public sealed record RoomSnapshotDto(
 
 public sealed record LockResultDto(bool Granted, string? OwnerName = null, string? Reason = null);
 
+public sealed record EnvironmentCommandDto(string EnvironmentId, string Mode, Guid OperationId, int CatalogVersion);
+public sealed record EnvironmentChangeDto(Guid OperationId, string Mode, EntityDto[] Entities,
+    RoomLightingDto Lighting, RoomParticlesDto Particles);
+
 public static class CollaborationProtocol
 {
-    public const int Version = 7;
+    public const int Version = 8;
     public const string RoomId = "laboratorio-principal";
 }

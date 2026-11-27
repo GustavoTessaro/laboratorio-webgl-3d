@@ -4,7 +4,7 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 
-export const COLLABORATION_PROTOCOL_VERSION = 7;
+export const COLLABORATION_PROTOCOL_VERSION = 8;
 export const COLLABORATION_ROOM_ID = 'laboratorio-principal';
 const HUB_URL = import.meta.env.VITE_COLLABORATION_URL?.trim()
   || (import.meta.env.DEV ? 'http://localhost:5080/hubs/laboratory' : null);
@@ -37,6 +37,7 @@ export class CollaborationClient {
     this.stopPromise = null;
     this.heldLocks = new Set();
     this.pendingLocks = new Map();
+    this.queuedEnvironments = [];
     this.renewalTimer = null;
     this.connection = new HubConnectionBuilder()
       .withUrl(HUB_URL)
@@ -50,10 +51,16 @@ export class CollaborationClient {
     this.connection.on('EntityDeleted', (entityId) => this.handlers.onEntityDeleted?.(entityId));
     this.connection.on('RoomLightingChanged', (state) => this.handlers.onLighting?.(state));
     this.connection.on('RoomParticlesChanged', (state) => this.handlers.onParticles?.(state));
+    this.connection.on('EnvironmentApplied', (change) => {
+      if (this.joined) this.handlers.onEnvironment?.(change);
+      else this.queuedEnvironments.push(change);
+    });
+    this.connection.on('EnvironmentReconciled', (snapshot) => this.handlers.onSnapshot?.(snapshot));
     this.connection.on('LockChanged', (editLock) => this.handlers.onLockChanged?.(editLock));
     this.connection.on('LockExpired', (editLock) => this.handlers.onLockChanged?.(editLock));
     this.connection.onreconnecting(() => {
       this.joined = false;
+      this.queuedEnvironments.length = 0;
       this.heldLocks.clear();
       this.pendingLocks.clear();
       this.handlers.onStatus?.('reconnecting', 'Reconectando à sala…');
@@ -75,6 +82,7 @@ export class CollaborationClient {
     });
     this.connection.onclose(() => {
       this.joined = false;
+      this.queuedEnvironments.length = 0;
       this.heldLocks.clear();
       this.pendingLocks.clear();
       this.stopRenewal();
@@ -148,6 +156,7 @@ export class CollaborationClient {
       this.lastSnapshot = snapshot;
       this.handlers.onStatus?.('connected', `Conectado à sala ${snapshot.roomId}`);
       this.handlers.onSnapshot?.(snapshot);
+      for (const change of this.queuedEnvironments.splice(0)) this.handlers.onEnvironment?.(change);
       return snapshot;
     }).catch((error) => {
       if (generation === this.connectionGeneration) this.joined = false;
@@ -219,6 +228,10 @@ export class CollaborationClient {
 
   updateParticles(command) {
     return this.connection.invoke('UpdateParticles', command);
+  }
+
+  applyEnvironment(command) {
+    return this.connection.invoke('ApplyEnvironment', command);
   }
 
   async deleteEntity(entityId) {

@@ -10,6 +10,8 @@ import { createLightingSession } from './lighting-session.js';
 import { createRoomSettingsSession } from './room-settings-session.js';
 import { bindParticleControls } from './particle-controls.js';
 import { bindInspectorControls } from './inspector-controls.js';
+import { bindEnvironmentControls } from './environment-controls.js';
+import { ENVIRONMENT_VERSION, prepareEnvironment } from './graphics/environment-presets.js';
 import { sameTrajectory } from './graphics/trajectory-settings.js';
 import { changeParticles, EMPTY_PARTICLES, sameParticleSettings } from './graphics/particle-settings.js';
 
@@ -59,6 +61,7 @@ try {
   let displayName = '';
   let connectionAttemptInProgress = false;
   let connectionAttemptId = 0;
+  let unresolvedEnvironment = null;
 
   const panel = createControlsPanel(document.querySelector('.controls-panel'), sceneControls, {
     getLock: (id) => editLocks.get(id),
@@ -101,6 +104,80 @@ try {
     document.querySelector('.particle-controls'), particleSession, sceneControls.particles, signal,
   );
   bindInspectorControls(document.querySelector('[data-graphics-inspector]'), sceneControls.inspector, signal);
+  bindEnvironmentControls(document.querySelector('[data-environments]'), {
+    load: loadEnvironment,
+    frame(preset, ids) {
+      sceneControls.setCameraPreset(preset.camera);
+      if (ids.length) sceneControls.frameEntities(ids);
+      else sceneControls.frameAll();
+    },
+  }, signal);
+
+  function applyEnvironmentChange(change, shared) {
+    const replace = change.mode === 'replace';
+    if (replace) {
+      cancelLocalInputs();
+      lightingControls.cancel();
+      particleControls.cancel();
+    }
+    sceneControls.applyEnvironmentEntities(change.entities, replace);
+    if (shared) {
+      if (replace) {
+        serverEntities.clear();
+        editLocks.clear();
+      }
+      for (const entity of change.entities) serverEntities.set(entity.id, entity);
+      lightingSession.accept(change.lighting);
+      particleSession.accept(change.particles);
+    } else {
+      if (replace) lightingSession.replaceLocal(change.lighting);
+      particleSession.replaceLocal(change.particles, !replace);
+    }
+    renderEntityList();
+    syncSelectedEntity();
+  }
+
+  async function loadEnvironment(preset, mode) {
+    const client = collaborationClient;
+    if (connectionAttemptInProgress || (lightingSession.shared && !client?.connected)) {
+      throw new Error('Reconecte à sala ou escolha continuar no modo local.');
+    }
+    if (mode === 'replace' && (activeEdits.size || lightingSession.pending || particleSession.pending)) {
+      throw new Error('Conclua as edições em andamento antes de substituir a cena.');
+    }
+    if (!client?.connected) {
+      const change = prepareEnvironment(preset.id, mode, {
+        entities: sceneControls.getSharedEntities(),
+        lighting: lightingSession.confirmed,
+        particles: particleSession.confirmed,
+      });
+      applyEnvironmentChange(change, false);
+      return change.entities.map(({ id }) => id);
+    }
+
+    const command = unresolvedEnvironment?.environmentId === preset.id && unresolvedEnvironment.mode === mode
+      ? unresolvedEnvironment
+      : { environmentId: preset.id, mode, operationId: crypto.randomUUID(), catalogVersion: ENVIRONMENT_VERSION };
+    if (unresolvedEnvironment && unresolvedEnvironment !== command) {
+      throw new Error('Confirme primeiro a tentativa anterior usando o mesmo ambiente e modo.');
+    }
+    await operationQueue;
+    if (pendingOperations.length || activeEdits.size) {
+      throw new Error('Conclua a sincronização das edições antes de aplicar um ambiente.');
+    }
+    unresolvedEnvironment = command;
+    try {
+      const ids = await client.applyEnvironment(command);
+      unresolvedEnvironment = null;
+      return ids;
+    } catch (error) {
+      if (client.connected && error.message.includes('Ambiente rejeitado.')) {
+        unresolvedEnvironment = null;
+        throw error;
+      }
+      throw new Error('A confirmação do ambiente está pendente. Após reconectar, repita o mesmo ambiente e modo.');
+    }
+  }
 
   disposePage = () => {
     pageLifetime.abort();
@@ -351,6 +428,7 @@ try {
     collaborationClient = new CollaborationClient({
       onStatus: setCollaborationStatus,
       onSnapshot: applyRoomSnapshot,
+      onEnvironment: (change) => applyEnvironmentChange(change, true),
       onLighting: lightingSession.accept,
       onParticles: particleSession.accept,
       onParticipantJoined: (participant) => {
@@ -472,6 +550,7 @@ try {
   }, { signal });
 
   useLocalButton.addEventListener('click', () => {
+    unresolvedEnvironment = null;
     connectionAttemptId += 1;
     connectionAttemptInProgress = false;
     collaborationDialog.close();
