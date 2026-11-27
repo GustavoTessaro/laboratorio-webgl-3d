@@ -6,14 +6,16 @@ import { normalizeMaterialSettings } from './object-materials.js';
 import { changeParticles, EMPTY_PARTICLES } from './particle-settings.js';
 import { BOUNDS_EPSILON, WORKSPACE_HEIGHT, WORKSPACE_LIMIT } from './scene-assets.js';
 import { normalizeTrajectory, trajectoryFits } from './trajectory-settings.js';
+import { materialHalfSize, shaderDisplacement } from './shader-settings.js';
 
 export const ENVIRONMENT_VERSION = catalog.version;
 export const environments = catalog.environments;
 export const MAX_ENVIRONMENT_OBJECTS = 100;
 
 function validateEntity(entity) {
-  const { halfSize } = describeGeometry(entity.type, entity.geometryParameters);
-  normalizeMaterialSettings(entity.materialSettings);
+  const spec = describeGeometry(entity.type, entity.geometryParameters);
+  const material = normalizeMaterialSettings(entity.materialSettings);
+  const halfSize = materialHalfSize(spec.halfSize, material, new THREE.Vector3());
   const { position, rotation, scale, animation } = entity;
   const axes = ['x', 'y', 'z'];
   const vector = (values) => new THREE.Vector3(...axes.map((axis) => values[axis]));
@@ -32,8 +34,12 @@ function validateEntity(entity) {
     new THREE.Vector3(WORKSPACE_LIMIT, WORKSPACE_HEIGHT, WORKSPACE_LIMIT)).expandByScalar(BOUNDS_EPSILON);
   const trajectory = normalizeTrajectory(entity.trajectory);
   const radius = animation.enabled || trajectory?.orient ? halfSize.clone().multiply(vector(scale)).length() : null;
-  if (!limits.containsBox(bounds) ||
-      !trajectoryFits(trajectory, position, bounds.getSize(new THREE.Vector3()).multiplyScalar(0.5), radius)) {
+  const extents = bounds.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+  if (shaderDisplacement(material) && animation.enabled) {
+    bounds.min.copy(vector(position)).addScalar(-radius);
+    bounds.max.copy(vector(position)).addScalar(radius);
+  }
+  if (!limits.containsBox(bounds) || !trajectoryFits(trajectory, position, extents, radius)) {
     throw new Error('Um objeto ou trajetória do ambiente ultrapassa os limites da cena.');
   }
 }

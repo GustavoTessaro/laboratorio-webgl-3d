@@ -160,7 +160,18 @@ export function createViewCamera() {
     frame(meshes) {
       const bounds = new THREE.Box3();
       const box = new THREE.Box3();
-      for (const mesh of meshes) bounds.union(box.setFromObject(mesh, true));
+      for (const mesh of meshes) {
+        const wave = mesh.userData.shaderDisplacement;
+        if (wave) {
+          mesh.updateWorldMatrix(true, false);
+          if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+          box.copy(mesh.geometry.boundingBox);
+          box.min.y -= wave;
+          box.max.y += wave;
+          box.applyMatrix4(mesh.matrixWorld);
+        } else box.setFromObject(mesh, true);
+        bounds.union(box);
+      }
       if (bounds.isEmpty()) return false;
 
       settleOrbit();

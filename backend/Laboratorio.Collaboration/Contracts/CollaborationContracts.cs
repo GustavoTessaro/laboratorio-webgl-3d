@@ -66,7 +66,19 @@ public sealed record MaterialSettingsDto(
     double RepeatV = 1,
     double OffsetU = 0,
     double OffsetV = 0,
-    double TextureRotation = 0);
+    double TextureRotation = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShaderDescriptorDto? Shader = null);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ShaderDescriptorDto(string Id, ShaderParameterValues? Parameters = null);
+
+public sealed class ShaderParameterValues : Dictionary<string, JsonElement>, IEquatable<ShaderParameterValues>
+{
+    public bool Equals(ShaderParameterValues? other) => other is not null && Count == other.Count &&
+        this.All(pair => other.TryGetValue(pair.Key, out var value) && JsonElement.DeepEquals(pair.Value, value));
+    public override bool Equals(object? obj) => obj is ShaderParameterValues other && Equals(other);
+    public override int GetHashCode() => Count;
+}
 
 public sealed class GeometryParametersDto : Dictionary<string, double>, IEquatable<GeometryParametersDto>
 {
@@ -112,6 +124,6 @@ public sealed record EnvironmentChangeDto(Guid OperationId, string Mode, EntityD
 
 public static class CollaborationProtocol
 {
-    public const int Version = 8;
+    public const int Version = 9;
     public const string RoomId = "laboratorio-principal";
 }

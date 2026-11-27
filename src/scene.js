@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createEntityRegistry } from './graphics/entity-registry.js';
+import { createShaderDiagnostics } from './graphics/shader-materials.js';
 import { bindTransformEditing, createSceneControls, synchronizeTransformTarget } from './graphics/scene-controls.js';
 import { createSceneLighting } from './graphics/scene-lighting.js';
 import { createViewCamera } from './graphics/view-camera.js';
@@ -40,7 +41,8 @@ export function createScene(container, {
   cameraView.connect(controls, transformControls);
   const coordinates = createCoordinateHelpers(scene);
 
-  const entityRegistry = createEntityRegistry(scene);
+  const shaderDiagnostics = createShaderDiagnostics(renderer);
+  const entityRegistry = createEntityRegistry(scene, undefined, shaderDiagnostics.failed);
   entityRegistry.createEntity('box', {
     id: '00000000-0000-4000-8000-000000000001',
     name: 'Cubo 1',
@@ -438,8 +440,8 @@ export function createScene(container, {
     entityRegistry.restoreBase(entity);
     entity.mesh.rotation.set(0, 0, 0);
     const valid = entityRegistry.constrainEntity(entity);
-    if (entity.trajectory?.enabled) entityRegistry.applyVisualPose(entity);
-    if (!valid) throw new Error('A orientação restaurada faria a trajetória ultrapassar os limites da cena.');
+    if (entityRegistry.requiresStrictBounds(entity)) entityRegistry.applyVisualPose(entity);
+    if (!valid) throw new Error('A orientação restaurada ultrapassaria os limites da cena.');
     if (['x', 'y', 'z'].some((axis) => before.rotation[axis] !== 0)) {
       collaborationHandlers.onEntityChanged?.(entityRegistry.serializeEntity(entity.id), { continuous: false });
     }
@@ -488,6 +490,7 @@ export function createScene(container, {
     controls.update();
     inspector.beforeRender(selectedEntity);
     renderer.render(scene, cameraView.camera);
+    if (shaderDiagnostics.refresh()) entityRegistry.refreshShaderFallbacks();
     inspector.afterRender(cameraView.camera);
   }
 
@@ -517,6 +520,7 @@ export function createScene(container, {
     selectionHelper.dispose();
     lighting.dispose();
     particles.dispose();
+    shaderDiagnostics.dispose();
     renderer.dispose();
     renderer.forceContextLoss();
     renderer.domElement.remove();

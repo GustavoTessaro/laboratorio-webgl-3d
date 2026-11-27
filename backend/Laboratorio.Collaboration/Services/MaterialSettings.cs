@@ -20,7 +20,8 @@ internal static class MaterialSettings
     public static MaterialSettingsDto? Normalize(MaterialSettingsDto? settings)
     {
         if (settings is null) return null;
-        if (settings.Kind is not ("basic" or "phong" or "standard") ||
+        if (settings.Kind is not ("basic" or "phong" or "standard" or "shader") ||
+            (settings.Kind == "shader" && settings.Shader is null) ||
             settings.Side is not ("front" or "back" or "double") ||
             (settings.TextureId is not null && !TextureIds.Contains(settings.TextureId)))
             throw new InvalidOperationException("Modelo, face ou identificador de textura inválido.");
@@ -39,7 +40,8 @@ internal static class MaterialSettings
         var normalized = settings with
         {
             Specular = settings.Specular.ToLowerInvariant(),
-            Emissive = settings.Emissive.ToLowerInvariant()
+            Emissive = settings.Emissive.ToLowerInvariant(),
+            Shader = ShaderSettings.Normalize(settings.Shader)
         };
         return normalized == Defaults ? null : normalized;
     }

@@ -30,7 +30,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   const resetOrientationButton = root.querySelector('[data-reset-orientation]');
 
   root.ownerDocument.addEventListener('trajectory-out-of-bounds', () => {
-    const message = 'A transformação faria a trajetória ultrapassar os limites da cena.';
+    const message = 'A transformação faria a trajetória ou a geometria ondulada ultrapassar os limites da cena.';
     trajectoryControls.report(message);
     objectActionMessage.hidden = false;
     objectActionMessage.textContent = message;
@@ -204,7 +204,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     if (!entity || !sceneControls.hasCopiedProperties()) return;
     const applied = sceneControls.applyCopiedProperties(entity.id);
     objectActionMessage.hidden = applied;
-    objectActionMessage.textContent = applied ? '' : 'As propriedades copiadas não cabem nos limites da trajetória neste objeto.';
+    objectActionMessage.textContent = applied ? '' : 'As propriedades copiadas ultrapassam os limites da cena neste objeto.';
   }, { signal });
 
   colorButtons.forEach((button) => {

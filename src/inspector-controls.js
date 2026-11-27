@@ -1,6 +1,7 @@
 import { INSPECTOR_SAMPLE_LIMIT, matrixValue } from './graphics/inspection-data.js';
 import { geometries } from './graphics/geometries.js';
 import { textureCatalog } from './graphics/object-materials.js';
+import { shaderCatalog, shaderLabels, shaderParameters, shaderDisplacement } from './graphics/shader-settings.js';
 
 const numeric = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const matrixNumber = new Intl.NumberFormat('pt-BR', {
@@ -12,6 +13,7 @@ const geometryLabels = {
   unique: 'Posições únicas', indices: 'Índices', triangles: 'Triângulos da malha', indexed: 'Indexação',
   attributes: 'Atributos (componentes × itens)', dimensions: 'Dimensões locais X/Y/Z',
   sphere: 'Raio local da esfera', conservative: 'Caixa conservadora X/Y/Z', texture: 'Textura', animation: 'Animação',
+  shader: 'Shader', uniforms: 'Parâmetros e uniforms', deformation: 'Malha deformada',
 };
 const poseLabels = {
   basePosition: 'Posição base', baseRotation: 'Rotação base (° XYZ)', baseScale: 'Escala base',
@@ -119,7 +121,9 @@ export function bindInspectorControls(root, inspector, signal) {
   }
 
   function updateGeometry(entity, facts) {
-    const texture = entity?.materialSettings?.textureId;
+    const settings = entity?.previewMaterialSettings ?? entity?.materialSettings;
+    const shader = settings?.kind === 'shader' ? settings.shader : null;
+    const texture = shader ? null : settings?.textureId;
     const animation = entity?.animation;
     const motion = entity?.trajectoryPreview === undefined ? entity?.trajectoryMotion : entity.trajectoryPreview;
     display(geometry.name, entity?.name);
@@ -129,7 +133,19 @@ export function bindInspectorControls(root, inspector, signal) {
     display(geometry.indexed, facts ? (facts.indexed ? 'Indexada' : 'Não indexada') : null);
     display(geometry.dimensions, vector(facts?.dimensions));
     display(geometry.sphere, facts?.sphereRadius);
-    display(geometry.conservative, vector(entity?.geometrySpec.halfSize, 2));
+    const halfSize = entity?.geometrySpec.halfSize;
+    const displacement = shaderDisplacement(settings);
+    display(geometry.conservative, vector(halfSize && { x: halfSize.x, y: halfSize.y + displacement, z: halfSize.z }, 2));
+    display(geometry.shader, shader && `${shaderCatalog[shader.id].name}${entity.mesh.userData.shaderFallback ? ' · fallback Basic' : ''}`);
+    display(geometry.uniforms, shader && [
+      `Cor primária ${entity.color}`, `Opacidade ${numeric.format(settings.opacity)}`,
+      ...Object.entries(shaderParameters(shader)).map(([key, value]) =>
+        `${shaderLabels[key]} ${typeof value === 'number' ? numeric.format(value) : value}`),
+      ...(entity.mesh.material.userData.speed ? [`Fase local ${numeric.format(entity.mesh.material.uniforms.uPhase.value)} rad`] : []),
+    ].join(' · '));
+    display(geometry.deformation, displacement
+      ? 'Vértices, normais, caixa, esfera e seleção usam a malha CPU. O enquadramento inclui a amplitude. Sem sombra projetada durante a deformação.'
+      : null);
     const status = entity?.mesh.userData.textureStatus;
     display(geometry.texture, entity ? (texture ? `${textureCatalog[texture]?.name ?? texture}${status === 'error'
       ? ' (falha de carregamento)' : status === 'loading' ? ' (carregando)' : ''}` : 'Sem textura') : null);

@@ -6,6 +6,44 @@ namespace Laboratorio.Collaboration.Tests;
 public sealed class RoomStateStoreTests
 {
     [Fact]
+    public void KnownShadersValidateAndWaveUsesTheSameBoundsAsTheFrontend()
+    {
+        var entity = CreateBox() with { Position = new Vector3Dto(0, 3, 0) };
+        foreach (var id in new[] { "gradient", "wave", "checker", "fresnel", "lava", "hologram" })
+            RoomStateStore.ValidateEntity(entity with { MaterialSettings = new(Kind: "shader", Shader: new(id)) });
+        var material = new MaterialSettingsDto(Kind: "shader", Shader: new("wave", new()
+        {
+            ["amplitude"] = System.Text.Json.JsonSerializer.SerializeToElement(0.35)
+        }));
+        RoomStateStore.ValidateEntity(entity with { MaterialSettings = material,
+            Trajectory = new(Enabled: true), Animation = new(true, "y", 45) });
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            MaterialSettings = material, Position = new(0, 0.75, 0)
+        }));
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            MaterialSettings = material, Position = new(9.15, 3, 0), Rotation = new(0, 0, Math.PI / 2)
+        }));
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            MaterialSettings = material, Animation = new(true, "y", 45), Trajectory = new(Enabled: true, Type: "helix", Height: -2)
+        }));
+        foreach (var shader in new ShaderDescriptorDto[]
+        {
+            new("unknown"), new("fresnel", new() { ["glsl"] = System.Text.Json.JsonSerializer.SerializeToElement("void main() {}") }),
+            new("wave", new() { ["amplitude"] = System.Text.Json.JsonSerializer.SerializeToElement(1) }),
+            new("checker", new() { ["scale"] = System.Text.Json.JsonSerializer.SerializeToElement("8") })
+        })
+            Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+            {
+                MaterialSettings = material with { Shader = shader }
+            }));
+        Assert.Throws<System.Text.Json.JsonException>(() =>
+            System.Text.Json.JsonSerializer.Deserialize<ShaderDescriptorDto>("""{"Id":"gradient","VertexShader":"void main(){}"}"""));
+    }
+
+    [Fact]
     public void ModelingPresetsAndSpatialLimitsUseTheSharedCatalog()
     {
         using var stream = typeof(RoomStateStore).Assembly.GetManifestResourceStream("GeometryCatalog.json")!;

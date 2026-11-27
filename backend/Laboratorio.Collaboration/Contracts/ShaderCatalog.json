@@ -1,0 +1,32 @@
+{
+  "gradient": {
+    "name": "Gradiente procedural",
+    "description": "Interpola duas cores nas coordenadas UV. A direção gira o eixo da transição.",
+    "fields": { "colorB": "#f4ac68", "direction": [0, -180, 180, 1] }
+  },
+  "wave": {
+    "name": "Ondulação de vértices",
+    "description": "O Vertex Shader desloca a malha no eixo Y local. Mais subdivisões melhoram a silhueta.",
+    "fields": { "colorB": "#70ecf0", "amplitude": [0.15, 0, 0.35, 0.01], "frequency": [4, 0.5, 16, 0.1], "speed": [2, 0, 8, 0.1] }
+  },
+  "checker": {
+    "name": "Quadriculado procedural",
+    "description": "Divide o domínio UV em células alternadas sem consultar uma imagem.",
+    "fields": { "colorB": "#f9ebc6", "scale": [8, 2, 32, 1] }
+  },
+  "fresnel": {
+    "name": "Efeito Fresnel",
+    "description": "Realça o contorno conforme o ângulo entre a normal e a direção de observação.",
+    "fields": { "colorB": "#b0e8ff", "intensity": [1, 0, 2, 0.05], "power": [3, 0.5, 12, 0.1] }
+  },
+  "lava": {
+    "name": "Lava procedural",
+    "description": "Combina duas escalas de ruído suave em UV para animar manchas quentes.",
+    "fields": { "colorB": "#ff9a35", "speed": [1, 0, 8, 0.1], "noiseScale": [6, 1, 22, 0.1], "noiseMix": [0.4, 0, 1, 0.05], "intensity": [1, 0, 2, 0.05] }
+  },
+  "hologram": {
+    "name": "Holograma",
+    "description": "Combina linhas de varredura em Y, brilho nos contornos e transparência variável.",
+    "fields": { "colorB": "#8affdc", "speed": [2, 0, 8, 0.1], "scanFrequency": [32, 4, 80, 1], "intensity": [1, 0, 2, 0.05], "power": [3, 0.5, 12, 0.1] }
+  }
+}

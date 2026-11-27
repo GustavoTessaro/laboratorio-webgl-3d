@@ -84,7 +84,7 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     const valid = mode === 'scale'
       ? registry.constrainEntityScale(entity, false)
       : registry.constrainEntity(entity, false);
-    if (!valid && entity.trajectory?.enabled) {
+    if (!valid && registry.requiresStrictBounds(entity)) {
       current.invalid = true;
       registry.applyVisualPose(entity);
       return null;
@@ -97,7 +97,7 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     if (final && changedBase) registry.constrainEntity(entity);
     else {
       setPose(mesh, pose);
-      if (entity.trajectory?.enabled && mode === 'scale') {
+      if (registry.requiresStrictBounds(entity) && mode === 'scale') {
         mesh.scale.set(snapshot.scale.x, snapshot.scale.y, snapshot.scale.z);
       }
     }
@@ -112,7 +112,7 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     const snapshot = cancelled || current.invalid ? null : getEditedSnapshot(current, true);
     if (!cancelled && current.invalid) onRejected?.();
     entity.editingTransform = false;
-    if (entity.trajectory?.enabled) registry.applyVisualPose(entity);
+    if (registry.requiresStrictBounds(entity)) registry.applyVisualPose(entity);
     else if (!snapshot) registry.restoreBase(entity);
     onEnd?.(entity.id, snapshot);
   }
@@ -124,9 +124,10 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     }
     const entity = registry.getEntity(controls.object?.userData.entityId);
     if (!entity) return;
-    if (entity.geometryPreview || entity.trajectoryPreview !== undefined) {
+    if (entity.geometryPreview || entity.trajectoryPreview !== undefined || entity.previewMaterialSettings) {
       registry.cancelGeometryPreview(entity);
       registry.cancelTrajectoryPreview(entity);
+      registry.cancelMaterialPreview(entity);
       controls.pointerUp(null);
       return;
     }
@@ -142,7 +143,7 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     if (!edit) return;
     const { entity } = edit;
     edit.invalid = false;
-    if (!entity.trajectory?.enabled) {
+    if (!registry.requiresStrictBounds(entity)) {
       if (controls.mode === 'scale') registry.constrainEntityScale(entity, false);
       else registry.constrainEntity(entity, false);
     }

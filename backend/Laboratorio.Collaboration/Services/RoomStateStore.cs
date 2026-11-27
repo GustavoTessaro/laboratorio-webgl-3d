@@ -416,7 +416,8 @@ public sealed class RoomStateStore
         lock (_sync) _replacingEnvironment = false;
     }
 
-    private static (GeometryParametersDto? Geometry, TrajectoryDto? Trajectory) ValidateSpatialSettings(EntityDto entity)
+    private static (GeometryParametersDto? Geometry, TrajectoryDto? Trajectory, MaterialSettingsDto? Material)
+        ValidateSpatialSettings(EntityDto entity)
     {
         if (entity is null ||
             entity.Position is null ||
@@ -438,6 +439,9 @@ public sealed class RoomStateStore
         }
 
         var (geometryParameters, halfSize) = GeometryCatalog.Describe(entity.Type, entity.GeometryParameters);
+        var material = MaterialSettings.Normalize(entity.MaterialSettings);
+        var displacement = ShaderSettings.Displacement(material);
+        halfSize.Y += displacement;
 
         if (entity.Color is null ||
             !Regex.IsMatch(entity.Color, "^#[0-9a-fA-F]{6}$", RegexOptions.CultureInvariant))
@@ -469,25 +473,26 @@ public sealed class RoomStateStore
             throw new InvalidOperationException("A escala deve estar entre 0,2 e 3,0.");
         }
 
-        var extents = GetWorldExtents(entity.Rotation, entity.Scale, halfSize);
-        if (entity.Position.X - extents.X < -WorkspaceLimit - BoundsEpsilon ||
-            entity.Position.X + extents.X > WorkspaceLimit + BoundsEpsilon ||
-            entity.Position.Y - extents.Y < -BoundsEpsilon ||
-            entity.Position.Y + extents.Y > WorkspaceHeight + BoundsEpsilon ||
-            entity.Position.Z - extents.Z < -WorkspaceLimit - BoundsEpsilon ||
-            entity.Position.Z + extents.Z > WorkspaceLimit + BoundsEpsilon)
-        {
-            throw new InvalidOperationException("A transformação ultrapassa os limites do cenário.");
-        }
         var trajectory = TrajectorySettings.Normalize(entity.Trajectory);
         var sx = halfSize.X * entity.Scale.X;
         var sy = halfSize.Y * entity.Scale.Y;
         var sz = halfSize.Z * entity.Scale.Z;
         var radius = Math.Sqrt(sx * sx + sy * sy + sz * sz);
+        var extents = GetWorldExtents(entity.Rotation, entity.Scale, halfSize);
+        var authored = displacement > 0 && entity.Animation.Enabled ? (X: radius, Y: radius, Z: radius) : extents;
+        if (entity.Position.X - authored.X < -WorkspaceLimit - BoundsEpsilon ||
+            entity.Position.X + authored.X > WorkspaceLimit + BoundsEpsilon ||
+            entity.Position.Y - authored.Y < -BoundsEpsilon ||
+            entity.Position.Y + authored.Y > WorkspaceHeight + BoundsEpsilon ||
+            entity.Position.Z - authored.Z < -WorkspaceLimit - BoundsEpsilon ||
+            entity.Position.Z + authored.Z > WorkspaceLimit + BoundsEpsilon)
+        {
+            throw new InvalidOperationException("A transformação ultrapassa os limites do cenário.");
+        }
         TrajectorySettings.ValidateBounds(trajectory, entity.Position, extents,
             entity.Animation.Enabled || trajectory?.Orient == true ? radius : null,
             WorkspaceLimit, WorkspaceHeight, BoundsEpsilon);
-        return (geometryParameters, trajectory);
+        return (geometryParameters, trajectory, material);
     }
 
     private static (double X, double Y, double Z) GetWorldExtents(
@@ -532,13 +537,13 @@ public sealed class RoomStateStore
 
     private static EntityDto CanonicalizeEntity(EntityDto entity)
     {
-        var (geometry, trajectory) = ValidateSpatialSettings(entity);
+        var (geometry, trajectory, material) = ValidateSpatialSettings(entity);
         return entity with
         {
             Id = Guid.Parse(entity.Id).ToString(),
             GeometryParameters = geometry,
             Trajectory = trajectory,
-            MaterialSettings = MaterialSettings.Normalize(entity.MaterialSettings)
+            MaterialSettings = material
         };
     }
 

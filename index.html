@@ -229,6 +229,7 @@
               <option value="basic">Basic · cor sem iluminação</option>
               <option value="phong">Phong · brilho especular</option>
               <option value="standard" selected>Standard · PBR</option>
+              <option value="shader">Shader · efeito procedural</option>
             </select>
 
             <div class="color-presets" role="group" aria-label="Cores predefinidas">
@@ -272,8 +273,25 @@
             </div>
 
             <div data-material-fields></div>
+            <p class="object-action-message" role="status" data-shader-status hidden></p>
 
-            <fieldset class="appearance-group">
+            <fieldset class="appearance-group" data-shader-panel hidden>
+              <legend>Shader predefinido</legend>
+              <label class="geometry-field">Efeito
+                <select class="geometry-select" data-shader-select></select>
+              </label>
+              <p class="geometry-description" data-shader-description></p>
+              <div data-shader-fields></div>
+              <button class="object-action" type="button" data-shader-reset>Restaurar parâmetros do shader</button>
+              <details class="inspection-group shader-source">
+                <summary>Consultar código GLSL</summary>
+                <p class="geometry-description">O Vertex Shader lê atributos como posição, normal e UV. A GPU interpola os valores enviados ao Fragment Shader, que calcula a cor. Uniforms são parâmetros constantes durante cada desenho, como cores e fase.</p>
+                <label>Vertex Shader<textarea rows="8" spellcheck="false" data-shader-source="vertexShader" readonly></textarea></label>
+                <label>Fragment Shader<textarea rows="8" spellcheck="false" data-shader-source="fragmentShader" readonly></textarea></label>
+                <button class="object-action" type="button" data-shader-copy>Copiar código GLSL</button>
+              </details>
+            </fieldset>
+            <fieldset class="appearance-group" data-image-texture-panel>
               <legend>Textura de cor</legend>
               <p class="geometry-description">O mapa usa as coordenadas UV da malha e é combinado com a cor do objeto.</p>
               <div class="texture-options" data-texture-options></div>

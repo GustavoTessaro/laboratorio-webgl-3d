@@ -763,6 +763,21 @@ h1 {
 .environment-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .environment-actions [hidden] { display: none; }
 
+.appearance-controls [hidden] { display: none; }
+.shader-source label { display: block; margin-block: 0.55rem; }
+.shader-source textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  padding: 0.5rem;
+  background: #141a24;
+  color: #e3ebff;
+  border: 1px solid #43516d;
+  border-radius: 0.35rem;
+  font: 0.75rem/1.5 ui-monospace, monospace;
+  tab-size: 2;
+}
+
 .geometry-field,
 .geometry-description {
   color: var(--text-muted);

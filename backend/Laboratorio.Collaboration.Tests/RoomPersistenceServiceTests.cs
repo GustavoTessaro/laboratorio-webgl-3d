@@ -854,6 +854,36 @@ public sealed class RoomPersistenceServiceTests
         Assert.Empty(verification.EnvironmentReceipts);
     }
 
+    [Fact]
+    public async Task ShaderUsesExistingMaterialColumnAndDoesNotWritePreviewOrRedundantConfirmation()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var factory = CreateFactory(connection, interceptor);
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var legacy = CreateBox() with { Position = new(0, 3, 0) };
+        Assert.Equal(legacy, Assert.Single((await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, [legacy])).Entities));
+        Assert.True(store.AcquireLock("ana", legacy.Id).Granted);
+        var edited = legacy with { MaterialSettings = new(Kind: "shader", TextureId: "wood", Roughness: 0.72,
+            Shader: new("wave", new() { ["speed"] = JsonSerializer.SerializeToElement(3), ["colorB"] = JsonSerializer.SerializeToElement("#ABCDEF") })) };
+        var commits = interceptor.CommitCount;
+        await service.UpdateEntityAsync("ana", edited, false);
+        Assert.Equal(commits, interceptor.CommitCount);
+        await using (var db = factory.CreateDbContext())
+            Assert.Null((await db.RoomEntities.SingleAsync()).MaterialSettingsJson);
+        var confirmed = await service.UpdateEntityAsync("ana", edited, true);
+        await service.UpdateEntityAsync("ana", edited, true);
+        Assert.Equal(commits + 1, interceptor.CommitCount);
+        Assert.Equal("#abcdef", confirmed.MaterialSettings!.Shader!.Parameters!["colorB"].GetString());
+        await using (var db = factory.CreateDbContext())
+            Assert.InRange((await db.RoomEntities.SingleAsync()).MaterialSettingsJson!.Length, 1, 1024);
+        var restored = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restored);
+        Assert.Equal(confirmed, Assert.Single((await restored.JoinAsync("bia", "Bia", CollaborationProtocol.Version, [])).Entities));
+    }
+
     private static EntityDto CreateBox() => new(
         Guid.NewGuid().ToString(),
         "Cubo",

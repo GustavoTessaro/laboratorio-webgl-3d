@@ -8,6 +8,7 @@ import {
 import { createGeometry, describeGeometry, geometries, sameGeometryParameters } from './geometries.js';
 import { normalizeTrajectory, sameTrajectory, trajectoryFits } from './trajectory-settings.js';
 import { advanceTrajectory, createTrajectoryMotion, createTrajectoryPose } from './trajectory-motion.js';
+import { materialHalfSize, shaderDisplacement } from './shader-settings.js';
 
 const INITIAL_ROTATION_SPEED = 45;
 const INITIAL_ROTATION_AXIS = 'y';
@@ -17,7 +18,7 @@ const spawnCoordinates = [-3.5, -1.75, 0, 1.75, 3.5]
   .flatMap((z) => [-3.5, -1.75, 0, 1.75, 3.5].map((x) => ({ x, z })))
   .filter(({ x, z }) => x !== 0 || z !== 0);
 
-export function createEntityRegistry(scene, texturePool = createTexturePool()) {
+export function createEntityRegistry(scene, texturePool = createTexturePool(), failedShaders) {
   const entities = new Map();
   const nameCounters = new Map();
   const entityBounds = new THREE.Box3();
@@ -35,6 +36,9 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   const baseQuaternion = new THREE.Quaternion();
   const trajectoryExtents = new THREE.Vector3();
   const scaledHalfSize = new THREE.Vector3();
+  const deformedHalfSize = new THREE.Vector3();
+  const workspace = new THREE.Box3(new THREE.Vector3(-WORKSPACE_LIMIT, 0, -WORKSPACE_LIMIT),
+    new THREE.Vector3(WORKSPACE_LIMIT, WORKSPACE_HEIGHT, WORKSPACE_LIMIT)).expandByScalar(BOUNDS_EPSILON);
   const applyTrajectoryPose = createTrajectoryPose();
   const validTransforms = new Map();
   let selectedEntityId = null;
@@ -94,13 +98,48 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     }
   }
 
+  function effectiveSettings(entity) {
+    return shaderDisplacement(entity.previewMaterialSettings) > shaderDisplacement(entity.materialSettings)
+      ? entity.previewMaterialSettings : entity.materialSettings;
+  }
+
+  function halfSizeFor(entity, spec = entity.geometrySpec) {
+    return materialHalfSize(spec.halfSize, effectiveSettings(entity), deformedHalfSize);
+  }
+
+  function waveFits(halfSize, pose, animation) {
+    if (animation.enabled) {
+      const radius = scaledHalfSize.copy(halfSize).multiply(pose.scale).length();
+      entityBounds.min.copy(pose.position).addScalar(-radius);
+      entityBounds.max.copy(pose.position).addScalar(radius);
+    } else {
+      baseMatrix.compose(pose.position, baseQuaternion.setFromEuler(pose.rotation), pose.scale);
+      measureBounds(halfSize, baseMatrix);
+    }
+    return workspace.containsBox(entityBounds);
+  }
+
+  function ensureShaderFit(entity, settings) {
+    if (!shaderDisplacement(settings)) return;
+    const base = validTransforms.get(entity.id);
+    for (const spec of [entity.geometrySpec, entity.geometryPreview?.spec]) {
+      if (!spec) continue;
+      const halfSize = materialHalfSize(spec.halfSize, settings, deformedHalfSize);
+      if (!waveFits(halfSize, base, entity.animation) ||
+          !fitsTrajectory(entity.trajectory, base, halfSize, entity.animation) ||
+          !fitsTrajectory(entity.trajectoryPreview?.settings, base, halfSize, entity.animation)) {
+        throw new Error('A ondulação, incluindo toda a rotação ou trajetória, ultrapassa os limites da cena. Eleve o objeto ou reduza a amplitude ou a escala.');
+      }
+    }
+  }
+
   function setTrajectory(entity, input, preview = false) {
     if (entity.editingTransform) return false;
     const settings = normalizeTrajectory(input);
     const base = validTransforms.get(entity.id);
-    requireTrajectoryFit(settings, base, entity.geometrySpec.halfSize, entity.animation);
+    requireTrajectoryFit(settings, base, halfSizeFor(entity), entity.animation);
     if (entity.geometryPreview) {
-      requireTrajectoryFit(settings, base, entity.geometryPreview.spec.halfSize, entity.animation);
+      requireTrajectoryFit(settings, base, halfSizeFor(entity, entity.geometryPreview.spec), entity.animation);
     }
     if (preview) {
       entity.trajectoryPreview = settings?.enabled ? createTrajectoryMotion(settings) : null;
@@ -123,7 +162,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     if (!entity.editingTransform) applyVisualPose(entity);
   }
 
-  function constrainEntity(entity, remember = true, halfSize = entity.geometrySpec.halfSize) {
+  function constrainEntity(entity, remember = true, halfSize = halfSizeFor(entity)) {
     const { mesh } = entity;
     mesh.updateWorldMatrix(true, false);
     measureBounds(halfSize, mesh.matrixWorld);
@@ -131,12 +170,14 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       restoreBase(entity);
       return false;
     }
-    if (entity.trajectory?.enabled && positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2) {
+    const displacement = shaderDisplacement(effectiveSettings(entity));
+    if ((entity.trajectory?.enabled || displacement) && positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2) {
       restoreBase(entity);
       return false;
     }
     mesh.position.add(positionCorrection);
-    if (!fitsTrajectory(entity.trajectory, mesh, halfSize, entity.animation)) {
+    if ((displacement && !waveFits(halfSize, mesh, entity.animation)) ||
+        !fitsTrajectory(entity.trajectory, mesh, halfSize, entity.animation)) {
       restoreBase(entity);
       return false;
     }
@@ -199,7 +240,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
 
   function scaleFitsWorkspace(entity) {
     entity.mesh.updateWorldMatrix(true, false);
-    measureBounds(entity.geometrySpec.halfSize, entity.mesh.matrixWorld);
+    measureBounds(halfSizeFor(entity), entity.mesh.matrixWorld);
     if (entityBounds.isEmpty()) return false;
     entityBounds.getSize(entitySize);
     return (
@@ -256,7 +297,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     }
 
     if (!constrainEntity(entity, remember)) {
-      if (entity.trajectory?.enabled) return false;
+      if (entity.trajectory?.enabled || shaderDisplacement(effectiveSettings(entity))) return false;
       mesh.scale.copy(previousScale);
       constrainEntity(entity, remember);
     }
@@ -307,7 +348,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       },
       lastEditor: position?.lastEditor ?? null,
     };
-    entity.materialController = createMaterialController(mesh, texturePool);
+    entity.materialController = createMaterialController(mesh, texturePool, failedShaders);
     applyAppearance(entity, entity.color, entity.materialMode, position?.materialSettings);
 
     entities.set(id, entity);
@@ -328,7 +369,8 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   function getDuplicatePosition(entity) {
     const base = validTransforms.get(entity.id);
     baseMatrix.compose(base.position, baseQuaternion.setFromEuler(base.rotation), base.scale);
-    measureBounds(entity.geometrySpec.halfSize, baseMatrix);
+    const halfSize = halfSizeFor(entity);
+    measureBounds(halfSize, baseMatrix);
     if (
       entityBounds.isEmpty() ||
       !Number.isFinite(entityBounds.min.x) ||
@@ -349,20 +391,22 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
       [0, -1.5],
       [0, 0],
     ];
+    const originalBounds = entityBounds.clone();
     for (const [offsetX, offsetZ] of offsets) {
       if (
-        entityBounds.min.x + offsetX >= -WORKSPACE_LIMIT &&
-        entityBounds.max.x + offsetX <= WORKSPACE_LIMIT &&
-        entityBounds.min.z + offsetZ >= -WORKSPACE_LIMIT &&
-        entityBounds.max.z + offsetZ <= WORKSPACE_LIMIT
+        originalBounds.min.x + offsetX >= -WORKSPACE_LIMIT &&
+        originalBounds.max.x + offsetX <= WORKSPACE_LIMIT &&
+        originalBounds.min.z + offsetZ >= -WORKSPACE_LIMIT &&
+        originalBounds.max.z + offsetZ <= WORKSPACE_LIMIT
       ) {
         const position = {
           x: base.position.x + offsetX,
           y: base.position.y,
           z: base.position.z + offsetZ,
         };
-        if (fitsTrajectory(entity.trajectory, base, entity.geometrySpec.halfSize, entity.animation,
-          new THREE.Vector3(position.x, position.y, position.z))) return position;
+        const candidate = { ...base, position: new THREE.Vector3(position.x, position.y, position.z) };
+        if ((!shaderDisplacement(entity.materialSettings) || waveFits(halfSize, candidate, entity.animation)) &&
+            fitsTrajectory(entity.trajectory, candidate, halfSize, entity.animation)) return position;
       }
     }
     return null;
@@ -408,15 +452,18 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     if (!entity || !copiedProperties) return false;
 
     const base = validTransforms.get(id);
-    if (copiedProperties.trajectory?.enabled) {
+    const copiedWave = shaderDisplacement(copiedProperties.materialSettings);
+    if (copiedProperties.trajectory?.enabled || copiedWave) {
       const candidate = { ...base, scale: copiedProperties.scale };
-      const halfSize = entity.geometrySpec.halfSize;
+      const halfSize = materialHalfSize(entity.geometrySpec.halfSize, copiedProperties.materialSettings, deformedHalfSize);
       baseMatrix.compose(base.position, baseQuaternion.setFromEuler(base.rotation), candidate.scale);
       measureBounds(halfSize, baseMatrix);
       if (!getPositionCorrection() || positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2 ||
+          (copiedWave && !waveFits(halfSize, candidate, copiedProperties.animation)) ||
           !fitsTrajectory(copiedProperties.trajectory, candidate, halfSize, copiedProperties.animation)) return false;
     }
     cancelTrajectoryPreview(entity);
+    cancelGeometryPreview(entity);
     restoreBase(entity);
     applyAppearance(entity, copiedProperties.color, copiedProperties.materialMode, copiedProperties.materialSettings);
     entity.mesh.scale.set(
@@ -511,18 +558,21 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
 
     const base = validTransforms.get(entity.id);
     baseMatrix.compose(base.position, baseQuaternion.setFromEuler(base.rotation), base.scale);
-    measureBounds(spec.halfSize, baseMatrix);
+    const halfSize = halfSizeFor(entity, spec);
+    measureBounds(halfSize, baseMatrix);
     if (!getPositionCorrection()) {
       throw new Error('A geometria não cabe na cena com a escala e a rotação atuais.');
     }
-    const activeTrajectory = entity.trajectory?.enabled || entity.trajectoryPreview?.settings.enabled;
+    const wave = shaderDisplacement(effectiveSettings(entity));
+    const activeTrajectory = entity.trajectory?.enabled || entity.trajectoryPreview?.settings.enabled || wave;
     if (activeTrajectory && positionCorrection.lengthSq() > BOUNDS_EPSILON ** 2) {
       throw new Error('A geometria ultrapassaria os limites da cena na posição base da trajetória.');
     }
     const correctedPosition = previewOnly || activeTrajectory ? base.position : base.position.clone().add(positionCorrection);
-    requireTrajectoryFit(entity.trajectory, base, spec.halfSize, entity.animation, correctedPosition);
+    if (wave && !waveFits(halfSize, base, entity.animation)) throw new Error('A geometria ondulada ultrapassa os limites da cena.');
+    requireTrajectoryFit(entity.trajectory, base, halfSize, entity.animation, correctedPosition);
     if (entity.trajectoryPreview?.settings) {
-      requireTrajectoryFit(entity.trajectoryPreview.settings, base, spec.halfSize, entity.animation, correctedPosition);
+      requireTrajectoryFit(entity.trajectoryPreview.settings, base, halfSize, entity.animation, correctedPosition);
     }
 
     const preview = entity.geometryPreview;
@@ -557,7 +607,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   }
 
   function applyVisualPose(entity) {
-    const halfSize = (entity.geometryPreview?.spec ?? entity.geometrySpec).halfSize;
+    const halfSize = halfSizeFor(entity, entity.geometryPreview?.spec ?? entity.geometrySpec);
     restoreBase(entity);
     const motion = entity.trajectoryPreview === undefined ? entity.trajectoryMotion : entity.trajectoryPreview;
     if (motion) {
@@ -575,6 +625,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
 
   function updateAnimations(delta) {
     for (const entity of entities.values()) {
+      entity.materialController.updateTime(delta);
       if (entity.editingTransform) continue;
       const motion = entity.trajectoryPreview === undefined ? entity.trajectoryMotion : entity.trajectoryPreview;
       if (!entity.animation.enabled && !motion) continue;
@@ -590,6 +641,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   function applyAppearance(entity, color, materialMode, input) {
     const settings = normalizeMaterialSettings(input);
     entity.materialController.apply(color, materialMode, settings);
+    entity.previewMaterialSettings = null;
     const changed = color !== entity.color || materialMode !== entity.materialMode ||
       !sameMaterialSettings(settings, entity.materialSettings);
     entity.color = color;
@@ -599,6 +651,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
   }
 
   function setAppearance(entity, color, materialMode = entity.materialMode, settings = entity.materialSettings) {
+    ensureShaderFit(entity, normalizeMaterialSettings(settings));
     if (!applyAppearance(entity, color, materialMode, settings)) return false;
     onEntityChanged(serializeEntity(entity));
     return true;
@@ -606,18 +659,36 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
 
   function setMaterialSettings(entity, settings, preview = false) {
     if (preview) {
-      entity.materialController.apply(entity.color, entity.materialMode, normalizeMaterialSettings(settings));
+      const next = normalizeMaterialSettings(settings);
+      ensureShaderFit(entity, next);
+      entity.materialController.apply(entity.color, entity.materialMode, next);
+      entity.previewMaterialSettings = sameMaterialSettings(next, entity.materialSettings) ? null : next;
     } else {
       setAppearance(entity, entity.color, entity.materialMode, settings);
     }
   }
 
+  function cancelMaterialPreview(entity) {
+    if (!entity.previewMaterialSettings) return;
+    entity.previewMaterialSettings = null;
+    entity.materialController.apply(entity.color, entity.materialMode, entity.materialSettings);
+  }
+
   function setAnimation(entity, changes) {
     const animation = { ...entity.animation, ...changes };
     if (Object.keys(changes).every((key) => animation[key] === entity.animation[key])) return;
-    requireTrajectoryFit(entity.trajectory, validTransforms.get(entity.id), entity.geometrySpec.halfSize, animation);
+    const base = validTransforms.get(entity.id);
+    if (shaderDisplacement(effectiveSettings(entity)) &&
+        (!waveFits(halfSizeFor(entity), base, animation) ||
+        !waveFits(halfSizeFor(entity, entity.geometryPreview?.spec ?? entity.geometrySpec), base, animation))) {
+      throw new Error('A rotação da geometria ondulada ultrapassa os limites da cena.');
+    }
+    requireTrajectoryFit(entity.trajectory, base, halfSizeFor(entity), animation);
+    if (entity.geometryPreview) {
+      requireTrajectoryFit(entity.trajectory, base, halfSizeFor(entity, entity.geometryPreview.spec), animation);
+    }
     requireTrajectoryFit(entity.trajectoryPreview?.settings, validTransforms.get(entity.id),
-      (entity.geometryPreview?.spec ?? entity.geometrySpec).halfSize, animation);
+      halfSizeFor(entity, entity.geometryPreview?.spec ?? entity.geometrySpec), animation);
     if (animation.enabled !== entity.animation.enabled || animation.axis !== entity.animation.axis) {
       entity.rotationPhase = 0;
       restoreBase(entity);
@@ -808,8 +879,13 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     constrainEntityScale,
     restoreBase,
     updateAnimations,
+    refreshShaderFallbacks() {
+      for (const entity of entities.values()) entity.materialController.refreshFallback();
+    },
+    requiresStrictBounds: (entity) => Boolean(entity.trajectory?.enabled || shaderDisplacement(effectiveSettings(entity))),
     setAppearance,
     setMaterialSettings,
+    cancelMaterialPreview,
     setAnimation,
     setTrajectory,
     cancelTrajectoryPreview,

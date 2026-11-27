@@ -1,4 +1,5 @@
 import { bindLocalInput } from './edit-gestures.js';
+import { bindShaderControls } from './shader-controls.js';
 import {
   MATERIAL_DEFAULTS, MATERIAL_RANGES, TEXTURE_TRANSFORM, textureCatalog, textureUrl,
 } from './graphics/object-materials.js';
@@ -17,6 +18,7 @@ const guidance = {
   basic: 'Basic mostra a cor e a textura sem responder à iluminação.',
   phong: 'Em Phong, brilho maior concentra o reflexo. A cor especular tinge esse reflexo.',
   standard: 'No PBR, a rugosidade espalha o reflexo e a metalicidade altera sua interação com a cor.',
+  shader: 'O efeito calcula suas próprias cores e é independente das luzes da cena. A cor do objeto é usada como cor primária.',
 };
 const nf = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 
@@ -26,6 +28,8 @@ export function bindMaterialControls(root, scene, signal, refresh) {
   const materialFields = root.querySelector('[data-material-fields]');
   const textureFields = root.querySelector('[data-texture-fields]');
   const textureMapping = root.querySelector('[data-texture-mapping]');
+  const imageTexturePanel = root.querySelector('[data-image-texture-panel]');
+  const shaderStatus = root.querySelector('[data-shader-status]');
   const textureOptions = root.querySelector('[data-texture-options]');
   const textureStatus = root.querySelector('[data-texture-status]');
   const reset = root.querySelector('[data-reset-texture]');
@@ -38,10 +42,21 @@ export function bindMaterialControls(root, scene, signal, refresh) {
   let selected;
   const controls = [];
 
-  function update(entity, changes) {
-    scene.setMaterialSettings(entity, { ...entity.materialSettings, ...changes });
-    refresh();
+  function report(message = '') {
+    shaderStatus.textContent = message;
+    shaderStatus.hidden = !message;
   }
+  function update(entity, changes, preview = false) {
+    try {
+      scene.setMaterialSettings(entity, { ...entity.materialSettings, ...changes }, preview);
+      showShaderStatus(entity);
+    } catch (error) {
+      scene.setMaterialSettings(entity, entity.materialSettings, true);
+      report(error.message);
+    }
+    if (!preview) refresh();
+  }
+  const shaderControls = bindShaderControls(root, scene, signal, update, report);
 
   function addField(group, [key, name, context]) {
     const label = document.createElement('label');
@@ -131,13 +146,16 @@ export function bindMaterialControls(root, scene, signal, refresh) {
   });
   textureOptions.replaceChildren(...textureButtons.map(({ button }) => button));
   kind.addEventListener('change', () => {
-    if (selected) update(selected, { kind: kind.value });
+    if (selected) update(selected, { kind: kind.value,
+      shader: kind.value === 'shader' ? selected.materialSettings.shader ?? { id: 'gradient' }
+        : selected.materialSettings.shader });
   }, { signal });
   reset.addEventListener('click', () => {
     if (selected) update(selected, TEXTURE_TRANSFORM);
   }, { signal });
 
   function cancel(id) {
+    shaderControls.cancel(id);
     for (const { gesture } of controls) {
       if (gesture?.entity && (id === undefined || gesture.entity.id === id)) gesture.cancel();
     }
@@ -148,8 +166,13 @@ export function bindMaterialControls(root, scene, signal, refresh) {
     textureStatus.hidden = !failed;
     textureStatus.textContent = failed ? 'A imagem falhou ao carregar. A cor do objeto continua visível.' : '';
   }
+  function showShaderStatus(entity = selected) {
+    report(entity?.mesh.userData?.shaderFallback ? 'O shader falhou neste navegador. A malha usa Basic como alternativa local.' : '');
+  }
+  const onShaderStatus = () => showShaderStatus();
   signal.addEventListener('abort', () => {
     selected?.mesh.removeEventListener?.('texture-status', showTextureStatus);
+    selected?.mesh.removeEventListener?.('shader-status', onShaderStatus);
   }, { once: true });
 
   return {
@@ -159,6 +182,9 @@ export function bindMaterialControls(root, scene, signal, refresh) {
       if (entity !== selected) {
         selected?.mesh.removeEventListener?.('texture-status', showTextureStatus);
         entity?.mesh.addEventListener?.('texture-status', showTextureStatus);
+        selected?.mesh.removeEventListener?.('shader-status', onShaderStatus);
+        entity?.mesh.addEventListener?.('shader-status', onShaderStatus);
+        showShaderStatus(entity);
       }
       selected = entity;
       const settings = entity?.materialSettings ?? MATERIAL_DEFAULTS;
@@ -166,14 +192,16 @@ export function bindMaterialControls(root, scene, signal, refresh) {
       kind.value = settings.kind;
       kind.disabled = reset.disabled = disabled;
       hint.textContent = guidance[settings.kind];
-      textureMapping.hidden = !settings.textureId;
+      imageTexturePanel.hidden = settings.kind === 'shader';
+      textureMapping.hidden = !settings.textureId || settings.kind === 'shader';
+      shaderControls.sync(entity, settings, disabled);
       for (const { id, button } of textureButtons) {
         button.disabled = disabled;
         button.setAttribute('aria-pressed', String(settings.textureId === id));
       }
       for (const { label, input, context, gesture, showValue } of controls) {
-        label.hidden = context === 'lit' ? settings.kind === 'basic'
-          : context === 'texture' ? !settings.textureId : Boolean(context && context !== settings.kind);
+        label.hidden = context === 'lit' ? !['standard', 'phong'].includes(settings.kind)
+          : context === 'texture' ? textureMapping.hidden : Boolean(context && context !== settings.kind);
         input.disabled = disabled || label.hidden;
         if (label.hidden) gesture?.cancel();
         if (!gesture?.entity) showValue(settings);
