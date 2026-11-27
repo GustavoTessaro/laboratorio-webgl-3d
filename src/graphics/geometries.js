@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import catalog from '../../backend/Laboratorio.Collaboration/Contracts/GeometryCatalog.json' with { type: 'json' };
+import { createModelingGeometry, describeModelingGeometry } from './modeling-geometries.js';
 
 export const GEOMETRY_BUDGET = { vertices: 8192, triangles: 8192 };
 export { catalog as geometries };
@@ -22,11 +23,11 @@ const factories = {
 
 export function describeGeometry(type, overrides = null) {
   if (!Object.hasOwn(catalog, type)) throw new Error(`Forma geométrica desconhecida: ${type}`);
-  const fields = catalog[type].parameters;
+  const { parameters: fields, modeling } = catalog[type];
   if (overrides !== null && (typeof overrides !== 'object' || Array.isArray(overrides))) {
     throw new Error('Os parâmetros da geometria devem ser um objeto.');
   }
-  for (const key of Object.keys(overrides ?? {})) {
+  for (const key of modeling ? [] : Object.keys(overrides ?? {})) {
     if (!Object.hasOwn(fields, key)) throw new Error(`Parâmetro incompatível com a forma: ${key}`);
   }
 
@@ -40,7 +41,12 @@ export function describeGeometry(type, overrides = null) {
     parameters[key] = value;
     if (value !== defaultValue) custom[key] = value;
   }
-  return { type, parameters, overrides: Object.keys(custom).length ? custom : null, halfSize: geometryHalfSize(type, parameters) };
+  const model = modeling && describeModelingGeometry(type, modeling, parameters, overrides, GEOMETRY_BUDGET);
+  if (model) Object.assign(custom, model.pointOverrides);
+  return {
+    type, parameters, overrides: Object.keys(custom).length ? custom : null,
+    halfSize: model?.halfSize ?? geometryHalfSize(type, parameters), model,
+  };
 }
 
 function geometryHalfSize(type, p) {
@@ -58,8 +64,8 @@ function geometryHalfSize(type, p) {
   }
 }
 
-export function createGeometry({ type, parameters }) {
-  const geometry = factories[type](parameters);
+export function createGeometry(spec) {
+  const geometry = spec.model ? createModelingGeometry(spec) : factories[spec.type](spec.parameters);
   const vertices = geometry.getAttribute('position').count;
   const triangles = (geometry.index?.count ?? vertices) / 3;
   if (vertices > GEOMETRY_BUDGET.vertices || triangles > GEOMETRY_BUDGET.triangles) {

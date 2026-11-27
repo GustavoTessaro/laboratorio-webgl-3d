@@ -6,6 +6,72 @@ namespace Laboratorio.Collaboration.Tests;
 public sealed class RoomStateStoreTests
 {
     [Fact]
+    public void ModelingPresetsAndSpatialLimitsUseTheSharedCatalog()
+    {
+        using var stream = typeof(RoomStateStore).Assembly.GetManifestResourceStream("GeometryCatalog.json")!;
+        using var json = System.Text.Json.JsonDocument.Parse(stream);
+        var entity = CreateBox() with { Position = new Vector3Dto(0, 4, 0) };
+        foreach (var type in new[] { "lathe", "extrude" })
+        {
+            var presets = json.RootElement.GetProperty(type).GetProperty("modeling").GetProperty("presets");
+            foreach (var preset in presets.EnumerateObject())
+            {
+                var parameters = ModelPoints(preset.Value.GetProperty("points").EnumerateArray()
+                    .Select(pair => (pair[0].GetDouble(), pair[1].GetDouble())).ToArray());
+                if (preset.Value.TryGetProperty("rounded", out var rounded) && rounded.GetBoolean())
+                    parameters["rounded"] = 1;
+                RoomStateStore.ValidateEntity(entity with { Type = type, GeometryParameters = parameters });
+            }
+        }
+
+        var tall = ModelPoints((1, -2), (1, 2));
+        var rotation = new Vector3Dto(0, 0, Math.PI / 2);
+        RoomStateStore.ValidateEntity(entity with { Type = "lathe", GeometryParameters = tall, Rotation = rotation });
+        Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(entity with
+        {
+            Type = "lathe", GeometryParameters = tall, Rotation = rotation, Position = new Vector3Dto(7.5, 4, 0),
+            Trajectory = new TrajectoryDto(Enabled: true, Radius: 1)
+        }));
+    }
+
+    [Fact]
+    public void ModelingRejectsInvalidPointEncodingDegeneracyAndMeshBudget()
+    {
+        var entity = CreateBox() with { Position = new Vector3Dto(0, 4, 0) };
+        var nearEdge = ModelPoints((0, 0), (1, 0), (0.01, 0.0001));
+        var bowtie = ModelPoints((0, 0), (1, 1), (0, 1), (1, 0));
+        var rounded = ModelPoints((-2, -2), (2, -2), (2, 2), (-2, 2));
+        rounded["rounded"] = 1;
+        rounded["curveSegments"] = 12;
+        rounded["depthSegments"] = 32;
+        var tight = ModelPoints((0, 0), (0.2, 0), (0.2, 0.2), (0, 0.2));
+        tight["bevelEnabled"] = 1;
+        tight["bevelSize"] = 0.4;
+        foreach (var (type, parameters) in new (string, GeometryParametersDto)[]
+        {
+            ("lathe", ModelPoints((-1, 0), (1, 1))),
+            ("lathe", ModelPoints((1, 1), (1, 0))),
+            ("lathe", ModelPoints((1, 0), (0, 1), (1, 2))),
+            ("lathe", new() { ["pointCount"] = 2, ["x0"] = 200, ["y0"] = 10, ["x1"] = 20 }),
+            ("extrude", nearEdge), ("extrude", bowtie), ("extrude", rounded), ("extrude", tight),
+            ("extrude", new() { ["x0"] = 1 })
+        })
+            Assert.Throws<InvalidOperationException>(() => RoomStateStore.ValidateEntity(
+                entity with { Type = type, GeometryParameters = parameters }));
+    }
+
+    private static GeometryParametersDto ModelPoints(params (double X, double Y)[] points)
+    {
+        var parameters = new GeometryParametersDto { ["pointCount"] = points.Length };
+        for (var i = 0; i < points.Length; i++)
+        {
+            parameters[$"x{i}"] = Math.Round(points[i].X * 10000);
+            parameters[$"y{i}"] = Math.Round(points[i].Y * 10000);
+        }
+        return parameters;
+    }
+
+    [Fact]
     public void TrajectoryValidationRejectsOvershootAndChecksWholeOrientedObject()
     {
         var entity = CreateBox() with { Position = new Vector3Dto(2, 3, 0) };

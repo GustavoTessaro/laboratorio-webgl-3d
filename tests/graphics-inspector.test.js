@@ -21,12 +21,14 @@ const counts = {
   dodecahedron: [108, 20, 0, 36],
   icosahedron: [60, 12, 0, 20],
   torusKnot: [845, 768, 4608, 1536],
+  lathe: [343, 289, 1728, 576],
+  extrude: [36, 8, 0, 12],
 };
 
 const close = (actual, expected) => assert.ok(actual.distanceTo(expected) < 1e-6,
   `${actual.toArray()} differs from ${expected.toArray()}`);
 
-test('reads the stored topology and distinct positions of all thirteen default geometries', () => {
+test('reads the stored topology and distinct positions of all fifteen default geometries', () => {
   assert.deepEqual(Object.keys(counts), Object.keys(geometries));
   for (const [type, expected] of Object.entries(counts)) {
     const geometry = createGeometry(describeGeometry(type));

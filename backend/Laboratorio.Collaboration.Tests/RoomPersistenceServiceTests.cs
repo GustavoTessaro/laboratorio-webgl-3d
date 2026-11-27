@@ -703,6 +703,55 @@ public sealed class RoomPersistenceServiceTests
             CollaborationProtocol.Version, [])).Entities));
     }
 
+    [Fact]
+    public async Task ModelingDescriptorsRoundTripThroughExistingColumnWithoutPreviewWrites()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var factory = CreateFactory(connection);
+        var legacy = CreateBox();
+        await SeedLegacyEntityAsync(factory, legacy, "20261127011417_AddEntityTrajectory");
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var joined = await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        Assert.Equal(legacy, Assert.Single(joined.Entities));
+        Assert.True(store.AcquireLock("ana", legacy.Id).Granted);
+        var parameters = new GeometryParametersDto
+        {
+            ["pointCount"] = 3, ["x0"] = -10000, ["y0"] = -10000,
+            ["x1"] = 10000, ["y1"] = -10000, ["x2"] = 0, ["y2"] = 10000,
+            ["bevelEnabled"] = 1, ["bevelSize"] = 0.05, ["depth"] = 0.7
+        };
+        var edited = legacy with
+        {
+            Type = "extrude", Position = new Vector3Dto(0, 4, 0), GeometryParameters = parameters
+        };
+        await service.UpdateEntityAsync("ana", edited, false);
+        await using (var context = factory.CreateDbContext())
+        {
+            var stored = await context.RoomEntities.SingleAsync();
+            Assert.Null(stored.GeometryParametersJson);
+            Assert.Equal("box", stored.Type);
+        }
+        var confirmed = await service.UpdateEntityAsync("ana", edited, true);
+        Assert.Equal(parameters, confirmed.GeometryParameters);
+        await using (var context = factory.CreateDbContext())
+        {
+            var stored = await context.RoomEntities.SingleAsync();
+            Assert.InRange(stored.GeometryParametersJson!.Length, 1, 1024);
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE TRIGGER prevent_redundant_modeling_write
+                BEFORE UPDATE ON RoomEntities
+                BEGIN SELECT RAISE(ABORT, 'unexpected write'); END;
+                """);
+        }
+        Assert.Equal(confirmed, await service.UpdateEntityAsync("ana", edited, true));
+        var restored = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restored);
+        Assert.Equal(confirmed, Assert.Single((await restored.JoinAsync("bia", "Bia",
+            CollaborationProtocol.Version, [])).Entities));
+    }
+
     private static EntityDto CreateBox() => new(
         Guid.NewGuid().ToString(),
         "Cubo",

@@ -12,8 +12,9 @@ const expected = {
 };
 
 test('all thirteen shapes fit their declared bounds and budget at default and maximum resolution', () => {
-  assert.deepEqual(Object.keys(geometries), Object.keys(expected));
-  for (const [type, { parameters }] of Object.entries(geometries)) {
+  assert.deepEqual(Object.keys(geometries).filter((type) => !geometries[type].modeling), Object.keys(expected));
+  for (const type of Object.keys(expected)) {
+    const { parameters } = geometries[type];
     const maximum = Object.fromEntries(Object.entries(parameters).map(([key, [, , max]]) => [key, max]));
     for (const supplied of [null, maximum]) {
       const spec = describeGeometry(type, supplied);

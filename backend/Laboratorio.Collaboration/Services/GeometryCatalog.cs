@@ -5,7 +5,7 @@ namespace Laboratorio.Collaboration.Services;
 
 internal static class GeometryCatalog
 {
-    private sealed record Shape(Dictionary<string, double[]> Parameters);
+    private sealed record Shape(Dictionary<string, double[]> Parameters, ModelingGeometry.Catalog? Modeling);
 
     // The same channel ceilings are used by the Three.js factories. The test suite
     // checks each shape at its maximum subdivision against the mesh budget.
@@ -25,8 +25,9 @@ internal static class GeometryCatalog
     {
         if (type is null || !Shapes.TryGetValue(type, out var shape))
             throw new InvalidOperationException("Tipo de geometria inválido.");
-        if (input is not null && (input.Count > shape.Parameters.Count ||
-            input.Keys.Any(key => !shape.Parameters.ContainsKey(key))))
+        var maxFields = shape.Parameters.Count + (shape.Modeling is null ? 0 : 1 + 2 * shape.Modeling.MaxPoints);
+        if (input is not null && (input.Count > maxFields ||
+            (shape.Modeling is null && input.Keys.Any(key => !shape.Parameters.ContainsKey(key)))))
             throw new InvalidOperationException("A forma recebeu parâmetros incompatíveis.");
 
         var resolved = new Dictionary<string, double>(shape.Parameters.Count);
@@ -41,7 +42,10 @@ internal static class GeometryCatalog
             if (value != limits[0]) overrides.Add(key, value);
         }
 
-        return (overrides.Count == 0 ? null : overrides, HalfSize(type, resolved));
+        var halfSize = shape.Modeling is null
+            ? HalfSize(type, resolved)
+            : ModelingGeometry.Describe(type, shape.Modeling, resolved, input, overrides);
+        return (overrides.Count == 0 ? null : overrides, halfSize);
     }
 
     private static (double X, double Y, double Z) HalfSize(string type, Dictionary<string, double> p) => type switch

@@ -108,6 +108,6 @@ public sealed record LockResultDto(bool Granted, string? OwnerName = null, strin
 
 public static class CollaborationProtocol
 {
-    public const int Version = 6;
+    public const int Version = 7;
     public const string RoomId = "laboratorio-principal";
 }
