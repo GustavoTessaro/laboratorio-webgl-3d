@@ -311,13 +311,27 @@ public sealed class RoomStateStore
         }
     }
 
-    public EntityDto UpdateEntity(string connectionId, EntityDto entity, bool final = true)
+    public EntityDto UpdateEntity(string connectionId, EntityDto entity, bool final = true, EntityDto? before = null)
     {
         entity = CanonicalizeEntity(entity);
+        if (before is not null)
+        {
+            before = CanonicalizeEntity(before);
+            if (before.Id != entity.Id) throw new InvalidOperationException("A base da edição pertence a outro objeto.");
+        }
         lock (_sync)
         {
             RequireLockOwner(connectionId, entity.Id);
             var committed = _entities[entity.Id];
+            if (before is not null)
+            {
+                entity = EntityEditIntent.Merge(before, entity, committed, final);
+                try { entity = CanonicalizeEntity(entity); }
+                catch (InvalidOperationException error)
+                {
+                    throw new InvalidOperationException($"A edição é incompatível com o estado confirmado. {error.Message}", error);
+                }
+            }
             if (committed.Type != entity.Type && (ModelCatalog.Find(committed.Type) is not null || ModelCatalog.Find(entity.Type) is not null))
                 throw new InvalidOperationException("O modelo de uma entidade existente não pode ser trocado.");
             if (!final)

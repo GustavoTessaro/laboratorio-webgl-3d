@@ -4,7 +4,7 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 
-export const COLLABORATION_PROTOCOL_VERSION = 10;
+export const COLLABORATION_PROTOCOL_VERSION = 11;
 export const COLLABORATION_ROOM_ID = 'laboratorio-principal';
 const HUB_URL = import.meta.env.VITE_COLLABORATION_URL?.trim()
   || (import.meta.env.DEV ? 'http://localhost:5080/hubs/laboratory' : null);
@@ -37,7 +37,7 @@ export class CollaborationClient {
     this.stopPromise = null;
     this.heldLocks = new Set();
     this.pendingLocks = new Map();
-    this.queuedEnvironments = [];
+    this.queuedRoomEvents = [];
     this.renewalTimer = null;
     this.connection = new HubConnectionBuilder()
       .withUrl(HUB_URL)
@@ -47,20 +47,22 @@ export class CollaborationClient {
 
     this.connection.on('ParticipantJoined', (participant) => this.handlers.onParticipantJoined?.(participant));
     this.connection.on('ParticipantLeft', (participantId) => this.handlers.onParticipantLeft?.(participantId));
-    this.connection.on('EntityUpserted', (entity) => this.handlers.onEntityUpserted?.(entity));
-    this.connection.on('EntityDeleted', (entityId) => this.handlers.onEntityDeleted?.(entityId));
+    const orderedRoomEvent = (event, handler) => this.connection.on(event, (value) => {
+      if (this.joined) this.handlers[handler]?.(value);
+      else this.queuedRoomEvents.push([handler, value]);
+    });
+    orderedRoomEvent('EntityUpserted', 'onEntityUpserted');
+    orderedRoomEvent('EntityPreviewed', 'onEntityPreviewed');
+    orderedRoomEvent('EntityDeleted', 'onEntityDeleted');
     this.connection.on('RoomLightingChanged', (state) => this.handlers.onLighting?.(state));
     this.connection.on('RoomParticlesChanged', (state) => this.handlers.onParticles?.(state));
-    this.connection.on('EnvironmentApplied', (change) => {
-      if (this.joined) this.handlers.onEnvironment?.(change);
-      else this.queuedEnvironments.push(change);
-    });
-    this.connection.on('EnvironmentReconciled', (snapshot) => this.handlers.onSnapshot?.(snapshot));
-    this.connection.on('LockChanged', (editLock) => this.handlers.onLockChanged?.(editLock));
-    this.connection.on('LockExpired', (editLock) => this.handlers.onLockChanged?.(editLock));
+    orderedRoomEvent('EnvironmentApplied', 'onEnvironment');
+    orderedRoomEvent('EnvironmentReconciled', 'onSnapshot');
+    orderedRoomEvent('LockChanged', 'onLockChanged');
+    orderedRoomEvent('LockExpired', 'onLockChanged');
     this.connection.onreconnecting(() => {
       this.joined = false;
-      this.queuedEnvironments.length = 0;
+      this.queuedRoomEvents.length = 0;
       this.heldLocks.clear();
       this.pendingLocks.clear();
       this.handlers.onStatus?.('reconnecting', 'Reconectando à sala…');
@@ -82,7 +84,7 @@ export class CollaborationClient {
     });
     this.connection.onclose(() => {
       this.joined = false;
-      this.queuedEnvironments.length = 0;
+      this.queuedRoomEvents.length = 0;
       this.heldLocks.clear();
       this.pendingLocks.clear();
       this.stopRenewal();
@@ -143,6 +145,7 @@ export class CollaborationClient {
     if (this.joinPromise) return this.joinPromise;
     if (this.joined && this.lastSnapshot) return this.lastSnapshot;
 
+    this.queuedRoomEvents.length = 0;
     const attempt = this.connection.invoke(
       'JoinRoom',
       this.displayName,
@@ -156,7 +159,7 @@ export class CollaborationClient {
       this.lastSnapshot = snapshot;
       this.handlers.onStatus?.('connected', `Conectado à sala ${snapshot.roomId}`);
       this.handlers.onSnapshot?.(snapshot);
-      for (const change of this.queuedEnvironments.splice(0)) this.handlers.onEnvironment?.(change);
+      for (const [handler, value] of this.queuedRoomEvents.splice(0)) this.handlers[handler]?.(value);
       return snapshot;
     }).catch((error) => {
       if (generation === this.connectionGeneration) this.joined = false;
@@ -218,8 +221,8 @@ export class CollaborationClient {
     return this.connection.invoke('CreateEntity', entity);
   }
 
-  async updateEntity(entity, final = false) {
-    return this.connection.invoke('UpdateEntity', entity, final);
+  async updateEntity(edit) {
+    return this.connection.invoke('UpdateEntity', edit);
   }
 
   updateLighting({ group, patch }) {

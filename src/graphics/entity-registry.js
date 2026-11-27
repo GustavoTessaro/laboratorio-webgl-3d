@@ -151,11 +151,12 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     }
     cancelTrajectoryPreview(entity);
     if (sameTrajectory(settings, entity.trajectory)) return false;
+    const before = serializeEntity(entity);
     if (entity.trajectory?.enabled && !settings?.enabled) entity.rotationPhase = 0;
     entity.trajectory = settings;
     entity.trajectoryMotion = settings?.enabled ? createTrajectoryMotion(settings) : null;
     applyVisualPose(entity);
-    onEntityChanged(serializeEntity(entity));
+    onEntityChanged(serializeEntity(entity), before);
     return true;
   }
 
@@ -469,6 +470,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   function applyCopiedProperties(id) {
     const entity = getEntity(id);
     if (!entity || entity.model || !copiedProperties) return false;
+    const before = serializeEntity(entity);
 
     const base = validTransforms.get(id);
     const copiedWave = shaderDisplacement(copiedProperties.materialSettings);
@@ -496,7 +498,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     constrainEntityScale(entity);
     applyVisualPose(entity);
     onSelectionChange(entity);
-    onEntityChanged(serializeEntity(entity));
+    onEntityChanged(serializeEntity(entity), before);
     return true;
   }
 
@@ -612,6 +614,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       applyVisualPose(entity);
       return true;
     }
+    const before = serializeEntity(entity);
     entity.geometryPreview.original.dispose();
     entity.geometryPreview = null;
     if (entity.type !== type) entity.name = nextEntityName(type);
@@ -620,7 +623,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     base.position.copy(correctedPosition);
     applyVisualPose(entity);
     if (entity.id === selectedEntityId) onSelectionChange(entity);
-    onEntityChanged(serializeEntity(entity));
+    onEntityChanged(serializeEntity(entity), before);
     return true;
   }
 
@@ -631,7 +634,8 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
 
   function applyVisualPose(entity) {
     const halfSize = halfSizeFor(entity, entity.geometryPreview?.spec ?? entity.geometrySpec);
-    restoreBase(entity);
+    if (entity.remoteTransformPreview) applyRemoteTransform(entity);
+    else restoreBase(entity);
     const motion = entity.trajectoryPreview === undefined ? entity.trajectoryMotion : entity.trajectoryPreview;
     if (motion) {
       applyTrajectoryPose(entity, motion);
@@ -644,6 +648,13 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       // The authored pose fits even if the current animated angle does not.
       constrainEntity(entity, false, halfSize);
     }
+  }
+
+  function applyRemoteTransform(entity) {
+    const { position, rotation, scale } = entity.remoteTransformPreview;
+    entity.mesh.position.set(position.x, position.y, position.z);
+    entity.mesh.rotation.set(rotation.x, rotation.y, rotation.z);
+    entity.mesh.scale.set(scale.x, scale.y, scale.z);
   }
 
   function updateAnimations(delta) {
@@ -676,8 +687,9 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   function setAppearance(entity, color, materialMode = entity.materialMode, settings = entity.materialSettings) {
     if (entity.model) return false;
     ensureShaderFit(entity, normalizeMaterialSettings(settings));
+    const before = serializeEntity(entity);
     if (!applyAppearance(entity, color, materialMode, settings)) return false;
-    onEntityChanged(serializeEntity(entity));
+    onEntityChanged(serializeEntity(entity), before);
     return true;
   }
 
@@ -702,6 +714,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
   function setAnimation(entity, changes) {
     const animation = { ...entity.animation, ...changes };
     if (Object.keys(changes).every((key) => animation[key] === entity.animation[key])) return;
+    const before = serializeEntity(entity);
     const base = validTransforms.get(entity.id);
     if ((entity.model || shaderDisplacement(effectiveSettings(entity))) &&
         (!baseEnvelopeFits(halfSizeFor(entity), base, animation) ||
@@ -720,14 +733,14 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     }
     entity.animation = animation;
     applyVisualPose(entity);
-    onEntityChanged(serializeEntity(entity));
+    onEntityChanged(serializeEntity(entity), before);
   }
 
   function setMutationHandlers(handlers = {}) {
     onEntityCreated = handlers.onCreated ?? (() => {});
     onEntityDeleted = handlers.onDeleted ?? (() => {});
-    onEntityChanged = (snapshot) => {
-      if (snapshot.type !== PRIVATE_MODEL) handlers.onChanged?.(snapshot);
+    onEntityChanged = (snapshot, before) => {
+      if (snapshot.type !== PRIVATE_MODEL) handlers.onChanged?.(snapshot, before);
     };
   }
 
@@ -787,6 +800,7 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
       });
       entity = getEntity(snapshot.id);
     } else {
+      entity.remoteTransformPreview = null;
       const base = validTransforms.get(entity.id);
       cancelTrajectoryPreview(entity);
       const trajectory = normalizeTrajectory(snapshot.trajectory);
@@ -948,6 +962,18 @@ export function createEntityRegistry(scene, texturePool = createTexturePool(), f
     cancelTrajectoryPreview,
     applyVisualPose,
     setMutationHandlers,
+    applyRemoteTransformPreview(snapshot) {
+      const entity = getEntity(snapshot.id);
+      if (!entity || entity.editingTransform) return;
+      entity.remoteTransformPreview = snapshot;
+      applyVisualPose(entity);
+    },
+    clearRemoteTransformPreview(id) {
+      const entity = getEntity(id);
+      if (!entity?.remoteTransformPreview) return;
+      entity.remoteTransformPreview = null;
+      if (!entity.editingTransform) applyVisualPose(entity);
+    },
     serializeEntity: (id, pose) => {
       const entity = getEntity(id);
       return entity ? serializeEntity(entity, pose) : null;

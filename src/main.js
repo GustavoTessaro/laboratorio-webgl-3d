@@ -4,6 +4,7 @@ import { CollaborationClient, COLLABORATION_PROTOCOL_VERSION } from './collabora
 import { sameGeometryParameters } from './graphics/geometries.js';
 import { sameMaterialSettings } from './graphics/object-materials.js';
 import { createTransformPreviews } from './edit-gestures.js';
+import { createEntityEditJournal, deliverEntityEdit } from './entity-edit-queue.js';
 import { createControlsPanel } from './controls-panel.js';
 import { bindLightingControls } from './lighting-controls.js';
 import { createLightingSession } from './lighting-session.js';
@@ -55,10 +56,12 @@ try {
   const editLocks = new Map();
   const pendingOperations = [];
   const activeEdits = new Map();
-  const previews = createTransformPreviews((entity, isCurrent) =>
-    enqueueOperation({ kind: 'update', entity, final: false, isCurrent }),
-  );
-  let inFlightUpdate = null;
+  const editJournal = createEntityEditJournal(sameEntityState);
+  const retryTimers = new Map();
+  const previews = createTransformPreviews((entity, isCurrent) => {
+    const before = activeEdits.get(entity.id)?.before;
+    if (before) enqueueOperation({ kind: 'update', entity, before, final: false, isCurrent });
+  });
   let collaborationClient = null;
   let collaborationConnected = false;
   let operationQueue = Promise.resolve();
@@ -192,6 +195,9 @@ try {
     pageLifetime.abort();
     for (const id of activeEdits.keys()) previews.end(id);
     activeEdits.clear();
+    for (const timer of retryTimers.values()) clearTimeout(timer);
+    retryTimers.clear();
+    editJournal.clear();
     lightingSession.leave();
     particleSession.leave();
     panel.dispose();
@@ -230,7 +236,10 @@ try {
       cancelLocalInputs();
       participants.clear();
       editLocks.clear();
-      for (const entityId of serverEntities.keys()) updatePresence(entityId);
+      for (const entityId of serverEntities.keys()) {
+        sceneControls.clearRemoteTransformPreview(entityId);
+        updatePresence(entityId);
+      }
       renderParticipants();
       if (sceneControls.getSelectedEntity()) {
         sceneControls.setSelectedEntityEditable(true);
@@ -265,42 +274,105 @@ try {
     collaborationMessage.textContent = text;
   }
 
-  function restoreServerEntity(entityId) {
+  function restoreServerEntity(entityId, refresh = true) {
+    if (signal.aborted) return;
     const authoritative = serverEntities.get(entityId);
-    if (authoritative) {
-      sceneControls.applySharedEntity(authoritative);
+    if (!authoritative || activeEdits.has(entityId)) return;
+    sceneControls.clearRemoteTransformPreview(entityId);
+    const visible = editJournal.project(authoritative);
+    if (!sameEntityState(sceneControls.serializeEntity(entityId), visible)) {
+      cancelLocalInputs(entityId);
+      sceneControls.applySharedEntity(visible);
+    }
+    const local = sceneControls.getEntity(entityId);
+    if (local) local.lastEditor = authoritative.lastEditor ?? null;
+    updatePresence(entityId);
+    if (refresh) {
+      renderEntityList();
+      if (sceneControls.getSelectedEntity()?.id === entityId) syncSelectedEntity();
     }
   }
 
-  async function publishCreation(entity) {
-    inFlightUpdate = entity;
+  function deferOperation(operation) {
+    if (!pendingOperations.includes(operation)) pendingOperations.push(operation);
+  }
+
+  function finishEdit(operation) {
+    if (!operation.final) return;
+    clearTimeout(retryTimers.get(operation));
+    retryTimers.delete(operation);
+    editJournal.finish(operation);
+    restoreServerEntity(operation.entity.id);
+    if (pendingOperations.length && collaborationClient?.connected) void flushPendingOperations();
+  }
+
+  async function processEdit(operation) {
+    const { entity, final } = operation;
+    const client = collaborationClient;
+    if (final && editJournal.hasEarlier(operation)) {
+      deferOperation(operation);
+      return;
+    }
+    const connectionId = client?.connection.connectionId;
+    const sameConnection = () => client?.connected && client.connection.connectionId === connectionId;
     try {
-      const created = await collaborationClient.createEntity(entity);
-      serverEntities.set(created.id, created);
-      updatePresence(created.id);
+      const result = await deliverEntityEdit(client, operation, (id) => serverEntities.has(id));
+      if (!final) return;
+      if (result.status === 'offline' || (result.status === 'locked' && result.lock.ownerName)) {
+        deferOperation(operation);
+        if (result.lock) showCollaborationMessage(`Edição aguardando o bloqueio de ${result.lock.ownerName}.`);
+        return;
+      }
+      if (result.status === 'removed' || !serverEntities.has(entity.id)) {
+        showCollaborationMessage('A edição pendente foi descartada porque o objeto foi removido ou a sala foi substituída.');
+      } else if (result.status === 'locked') {
+        showCollaborationMessage(result.lock.reason ?? 'Não foi possível obter o bloqueio do objeto.');
+      }
+      finishEdit(operation);
+    } catch (error) {
+      if (!final || signal.aborted) return;
+      if (!sameConnection() || !error.message.includes('Edição rejeitada.')) {
+        deferOperation(operation);
+        showCollaborationMessage('Confirmação pendente. A edição será verificada com o servidor.');
+        if (sameConnection() && !retryTimers.has(operation)) {
+          const retry = operation.retryCount ?? 0;
+          if (retry < 4) {
+            operation.retryCount = retry + 1;
+            retryTimers.set(operation, setTimeout(() => {
+              retryTimers.delete(operation);
+              if (!signal.aborted && collaborationClient?.connected) void flushPendingOperations();
+            }, 1000 * 2 ** retry));
+          }
+        }
+      } else {
+        finishEdit(operation);
+        showCollaborationMessage(error.message.slice(error.message.indexOf('Edição rejeitada.')));
+      }
     } finally {
-      inFlightUpdate = null;
+      if (sameConnection() && !activeEdits.has(entity.id) && client.heldLocks.has(entity.id)) {
+        try { await client.releaseEditLock(entity.id); }
+        catch (error) { showCollaborationMessage(`Falha ao liberar o bloqueio: ${error.message}`); }
+      }
     }
   }
 
   async function processOperation(operation) {
+    if (operation.kind === 'update') return processEdit(operation);
     if (operation.isCurrent && !operation.isCurrent()) return;
     if (!collaborationClient?.connected) {
-      if (operation.final !== false) pendingOperations.push(operation);
+      if (operation.final !== false) deferOperation(operation);
       return;
     }
     if (operation.kind === 'delete') {
       if (!serverEntities.has(operation.id)) return;
       const lock = await collaborationClient.acquireEditLock(operation.id);
       if (!lock.granted) {
-        pendingOperations.push(operation);
+        deferOperation(operation);
         showCollaborationMessage(lock.reason ?? `Objeto bloqueado por ${lock.ownerName}.`);
         return;
       }
       try {
         await collaborationClient.deleteEntity(operation.id);
-        serverEntities.delete(operation.id);
-        sceneControls.removeSharedEntity(operation.id);
       } finally {
         if (collaborationClient.heldLocks.has(operation.id)) {
           await collaborationClient.releaseEditLock(operation.id);
@@ -309,49 +381,7 @@ try {
       return;
     }
 
-    const entity = operation.entity;
-    const exists = serverEntities.has(entity.id);
-    const known = serverEntities.get(entity.id);
-    if (operation.final && sameEntityState(known, entity)) return;
-    if (!exists) {
-      if (operation.final === false || operation.expected) return;
-      await publishCreation(entity);
-      return;
-    }
-
-    const lock = await collaborationClient.acquireEditLock(entity.id);
-    if (operation.isCurrent && !operation.isCurrent()) return;
-    if (!lock.granted) {
-      if (activeEdits.has(entity.id)) {
-        sceneControls.cancelTransformEdit();
-      }
-      restoreServerEntity(entity.id);
-      syncSelectedEntity();
-      showCollaborationMessage(
-        lock.ownerName
-          ? `Esse objeto está sendo editado por ${lock.ownerName}.`
-          : lock.reason ?? 'Não foi possível obter o bloqueio do objeto.',
-      );
-      return;
-    }
-    try {
-      if (operation.replaying && !sameEntityState(serverEntities.get(entity.id), operation.replayExpected)) {
-        showCollaborationMessage('O objeto mudou antes que a alteração pendente pudesse ser enviada.');
-        return;
-      }
-      if (operation.final !== false) inFlightUpdate = entity;
-      const updated = await collaborationClient.updateEntity(entity, operation.final !== false);
-      if (operation.final !== false) {
-        serverEntities.set(updated.id, updated);
-        if (operation.replaying && !activeEdits.has(updated.id)) sceneControls.applySharedEntity(updated);
-        updatePresence(updated.id);
-      }
-    } finally {
-      inFlightUpdate = null;
-      if (!activeEdits.has(entity.id) && !operation.transform && operation.final !== false) {
-        await collaborationClient.releaseEditLock(entity.id);
-      }
-    }
+    if (!serverEntities.has(operation.entity.id)) await collaborationClient.createEntity(operation.entity);
   }
 
   function enqueueOperation(operation) {
@@ -359,10 +389,11 @@ try {
       return Promise.resolve();
     }
     if (operation.kind === 'update' && operation.final) {
-      operation.expected = serverEntities.get(operation.entity.id);
+      if (!operation.before || sameEntityState(operation.before, operation.entity)) return Promise.resolve();
+      editJournal.track(operation);
     }
     if (!collaborationConnected) {
-      if (operation.final !== false) pendingOperations.push(operation);
+      if (operation.final !== false) deferOperation(operation);
       return Promise.resolve();
     }
     const task = operationQueue.then(() => processOperation(operation));
@@ -375,7 +406,7 @@ try {
         return;
       }
       if (!collaborationClient?.connected || operation.kind !== 'update') {
-        pendingOperations.push(operation);
+        deferOperation(operation);
         showCollaborationMessage(`Alteração mantida localmente e aguardando envio: ${error.message}`);
       } else {
         restoreServerEntity(operation.entity.id);
@@ -385,32 +416,23 @@ try {
     return operationQueue;
   }
 
-  function publishEntity(entity, continuous = false) {
+  function publishEntity(entity, { continuous, before }) {
     if (!entity) return Promise.resolve();
     if (continuous) return previews.push(entity);
-    return enqueueOperation({ kind: 'update', entity, final: true });
+    return enqueueOperation({ kind: 'update', entity, before, final: true });
   }
 
   function flushPendingOperations() {
     operationQueue = operationQueue.then(async () => {
       const batch = pendingOperations.splice(0);
-      const beforeReplay = new Map(serverEntities);
       for (let index = 0; index < batch.length; index += 1) {
         const operation = batch[index];
-        if (operation.expected) {
-          const current = beforeReplay.get(operation.entity.id);
-          if (!sameEntityState(current, operation.expected) && !sameEntityState(current, operation.entity)) {
-            showCollaborationMessage('Um objeto mudou na sala durante a desconexão. A versão compartilhada foi preservada.');
-            continue;
-          }
+        if (retryTimers.has(operation)) {
+          deferOperation(operation);
+          continue;
         }
         try {
-          await processOperation({
-            ...operation,
-            transform: false,
-            replaying: true,
-            replayExpected: operation.entity && serverEntities.get(operation.entity.id),
-          });
+          await processOperation(operation);
         } catch (error) {
           pendingOperations.unshift(...batch.slice(index));
           showCollaborationMessage(`Alterações aguardam sincronização: ${error.message}`);
@@ -438,7 +460,9 @@ try {
     lightingSession.resume(snapshot.lighting);
     particleControls.cancel();
     particleSession.resume(snapshot.particles);
-    for (const entity of snapshot.entities) updatePresence(entity.id);
+    for (const entity of snapshot.entities) restoreServerEntity(entity.id, false);
+    renderEntityList();
+    syncSelectedEntity();
     renderParticipants();
     void flushPendingOperations();
   }
@@ -461,17 +485,10 @@ try {
       },
       onEntityUpserted: (entity) => {
         serverEntities.set(entity.id, entity);
-        const local = sceneControls.getEntity(entity.id);
-        if (local && sameEntityState(inFlightUpdate, entity)) {
-          local.lastEditor = entity.lastEditor ?? null;
-        } else {
-          cancelLocalInputs(entity.id);
-          if (activeEdits.has(entity.id)) sceneControls.cancelTransformEdit();
-          sceneControls.applySharedEntity(entity);
-        }
-        updatePresence(entity.id);
-        renderEntityList();
-        if (sceneControls.getSelectedEntity()?.id === entity.id) syncSelectedEntity();
+        restoreServerEntity(entity.id);
+      },
+      onEntityPreviewed: (entity) => {
+        if (serverEntities.has(entity.id) && !activeEdits.has(entity.id)) sceneControls.applyRemoteTransformPreview(entity);
       },
       onEntityDeleted: (entityId) => {
         cancelLocalInputs(entityId);
@@ -484,6 +501,7 @@ try {
         const ownLock = editLocks.get(lock.entityId)?.participantId === collaborationClient.connection.connectionId;
         if (!lock.participantId) {
           editLocks.delete(lock.entityId);
+          sceneControls.clearRemoteTransformPreview(lock.entityId);
         } else {
           editLocks.set(lock.entityId, lock);
         }
@@ -520,11 +538,11 @@ try {
       }
     },
     onEntityDeleted: (id) => enqueueOperation({ kind: 'delete', id }),
-    onEntityChanged: (entity, { continuous }) => publishEntity(entity, continuous),
+    onEntityChanged: publishEntity,
     onEditStateChange: (entityId, editing, finalEntity) => {
       if (sceneControls.getEntity(entityId)?.privateModel) return;
       if (editing) {
-        const edit = {};
+        const edit = { before: sceneControls.serializeEntity(entityId) };
         activeEdits.set(entityId, edit);
         if (!collaborationConnected) return;
         previews.start(entityId);
@@ -547,8 +565,9 @@ try {
       activeEdits.delete(entityId);
       if (!edit) return;
       if (finalEntity) {
-        enqueueOperation({ kind: 'update', entity: finalEntity, final: true, transform: true });
+        enqueueOperation({ kind: 'update', entity: finalEntity, before: edit.before, final: true });
       }
+      restoreServerEntity(entityId);
       operationQueue = operationQueue.then(async () => {
         if (!activeEdits.has(entityId) && collaborationClient?.connected &&
             collaborationClient.heldLocks.has(entityId)) {

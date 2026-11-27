@@ -117,6 +117,7 @@ public sealed record RoomSnapshotDto(
     RoomParticlesDto Particles);
 
 public sealed record LockResultDto(bool Granted, string? OwnerName = null, string? Reason = null);
+public sealed record EntityEditDto(EntityDto Before, EntityDto After, bool Final);
 
 public sealed record EnvironmentCommandDto(string EnvironmentId, string Mode, Guid OperationId, int CatalogVersion);
 public sealed record EnvironmentChangeDto(Guid OperationId, string Mode, EntityDto[] Entities,
@@ -124,6 +125,6 @@ public sealed record EnvironmentChangeDto(Guid OperationId, string Mode, EntityD
 
 public static class CollaborationProtocol
 {
-    public const int Version = 10;
+    public const int Version = 11;
     public const string RoomId = "laboratorio-principal";
 }

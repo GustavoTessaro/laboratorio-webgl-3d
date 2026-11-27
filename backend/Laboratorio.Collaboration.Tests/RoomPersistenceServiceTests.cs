@@ -914,6 +914,115 @@ public sealed class RoomPersistenceServiceTests
         Assert.Empty(restoredStore.GetSnapshot().Entities);
     }
 
+    [Fact]
+    public async Task QueuedColorPreservesPositionConfirmedBeforeItsLock()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var factory = CreateFactory(connection);
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = CreateBox();
+        var red = original with { Color = "#f06b6b" };
+        await service.JoinAsync("a", "Ana", CollaborationProtocol.Version, [original]);
+        await service.JoinAsync("b", "Bia", CollaborationProtocol.Version, []);
+        Assert.True(store.AcquireLock("b", original.Id).Granted);
+        await service.UpdateEntityAsync("b", original with { Position = original.Position with { X = 2 } }, true);
+        Assert.True(store.ReleaseLock("b", original.Id));
+        Assert.True(store.AcquireLock("a", original.Id).Granted);
+        var confirmed = await service.UpdateEntityAsync("a", red, true, original);
+        Assert.Equal(2, confirmed.Position.X);
+        Assert.Equal(red.Color, confirmed.Color);
+        var restored = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restored);
+        Assert.Equal(confirmed, Assert.Single((await restored.JoinAsync("b", "Bia", CollaborationProtocol.Version, [])).Entities));
+    }
+
+    [Fact]
+    public async Task EditIntentRejectsAnOverlappingFieldWithoutWriting()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var store = new RoomStateStore();
+        var service = CreateService(CreateFactory(connection, interceptor), store);
+        await StartAndWaitAsync(service);
+        var original = CreateBox();
+        await service.JoinAsync("a", "Ana", CollaborationProtocol.Version, [original]);
+        await service.JoinAsync("b", "Bia", CollaborationProtocol.Version, []);
+        Assert.True(store.AcquireLock("b", original.Id).Granted);
+        var winner = await service.UpdateEntityAsync("b", original with { Color = "#54c88a" }, true, original);
+        Assert.True(store.ReleaseLock("b", original.Id));
+        Assert.True(store.AcquireLock("a", original.Id).Granted);
+        var writes = interceptor.CommitCount;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.UpdateEntityAsync("a", original with { Color = "#f06b6b" }, true, original));
+        Assert.Contains("Conflito em cor", error.Message);
+        Assert.Equal(winner, store.GetEntity(original.Id));
+        Assert.Equal(writes, interceptor.CommitCount);
+    }
+
+    [Fact]
+    public async Task IndividuallyValidGeometryAndScaleWithTrajectoryCanConflictAfterMerging()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var store = new RoomStateStore();
+        var service = CreateService(CreateFactory(connection, interceptor), store);
+        await StartAndWaitAsync(service);
+        var original = CreateBox() with { Position = new(5, 4, 0), Trajectory = new(Enabled: true, Radius: 2) };
+        await service.JoinAsync("a", "Ana", CollaborationProtocol.Version, [original]);
+        await service.JoinAsync("b", "Bia", CollaborationProtocol.Version, []);
+        var geometry = original with { GeometryParameters = new() { ["width"] = 4 } };
+        var scale = original with { Scale = new(3, 1, 1) };
+        RoomStateStore.ValidateEntity(geometry);
+        RoomStateStore.ValidateEntity(scale);
+        Assert.True(store.AcquireLock("b", original.Id).Granted);
+        var confirmed = await service.UpdateEntityAsync("b", scale, true, original);
+        Assert.True(store.ReleaseLock("b", original.Id));
+        Assert.True(store.AcquireLock("a", original.Id).Granted);
+        var writes = interceptor.CommitCount;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.UpdateEntityAsync("a", geometry, true, original));
+        Assert.Contains("incompatível com o estado confirmado", error.Message);
+        Assert.Equal(confirmed, store.GetEntity(original.Id));
+        Assert.Equal(writes, interceptor.CommitCount);
+    }
+
+    [Fact]
+    public async Task ReplayedIntentAfterAmbiguousConfirmationDoesNotRewriteOrResurrect()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var factory = CreateFactory(connection, interceptor);
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = CreateBox();
+        await service.JoinAsync("a", "Ana", CollaborationProtocol.Version, [original]);
+        Assert.True(store.AcquireLock("a", original.Id).Granted);
+        var green = original with { Color = "#54c88a" };
+        var moved = original with { Position = original.Position with { X = 2 } };
+        var beforePreview = interceptor.CommitCount;
+        Assert.Equal(moved.Position, (await service.UpdateEntityAsync("a", moved, false, original)).Position);
+        Assert.Equal(original, store.GetEntity(original.Id));
+        Assert.Equal(beforePreview, interceptor.CommitCount);
+        interceptor.ThrowAfterNextCommit();
+        var confirmed = await service.UpdateEntityAsync("a", green, true, original);
+        var writes = interceptor.CommitCount;
+        var restartedStore = new RoomStateStore();
+        var restarted = CreateService(factory, restartedStore);
+        await StartAndWaitAsync(restarted);
+        await restarted.JoinAsync("b", "Bia", CollaborationProtocol.Version, []);
+        Assert.True(restartedStore.AcquireLock("b", original.Id).Granted);
+        Assert.Equal(confirmed, await restarted.UpdateEntityAsync("b", green, true, original));
+        Assert.Equal(writes, interceptor.CommitCount);
+        Assert.True(restartedStore.ReleaseLock("b", original.Id));
+        await restarted.ApplyEnvironmentAsync("b", new("empty-scene", "replace", Guid.NewGuid(), 1));
+        Assert.False(restartedStore.AcquireLock("b", original.Id).Granted);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.UpdateEntityAsync("b", green, true, original));
+        Assert.Null(restartedStore.GetEntity(original.Id));
+    }
+
     private static EntityDto CreateBox() => new(
         Guid.NewGuid().ToString(),
         "Cubo",

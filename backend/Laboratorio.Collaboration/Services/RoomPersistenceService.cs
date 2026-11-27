@@ -583,13 +583,13 @@ public sealed partial class RoomPersistenceService(
         }
     }
 
-    public async Task<EntityDto> UpdateEntityAsync(string connectionId, EntityDto entity, bool final)
+    public async Task<EntityDto> UpdateEntityAsync(string connectionId, EntityDto entity, bool final, EntityDto? before = null)
     {
         await _writeLock.WaitAsync();
         try
         {
             EnsureReady();
-            var updated = store.UpdateEntity(connectionId, entity, final);
+            var updated = store.UpdateEntity(connectionId, entity, final, before);
             if (!final || (_persistedEntities.TryGetValue(updated.Id, out var persisted) && persisted == updated))
             {
                 return updated;

@@ -183,8 +183,8 @@ export function createScene(container, {
       removePresenceLabel(id);
       if (!applyingRemoteState) collaborationHandlers.onEntityDeleted?.(id);
     },
-    onChanged: (snapshot) => {
-      if (!applyingRemoteState) collaborationHandlers.onEntityChanged?.(snapshot, { continuous: false });
+    onChanged: (snapshot, before) => {
+      if (!applyingRemoteState) collaborationHandlers.onEntityChanged?.(snapshot, { continuous: false, before });
     },
   });
 
@@ -449,7 +449,7 @@ export function createScene(container, {
     if (entityRegistry.requiresStrictBounds(entity)) entityRegistry.applyVisualPose(entity);
     if (!valid) throw new Error('A orientação restaurada ultrapassaria os limites da cena.');
     if (['x', 'y', 'z'].some((axis) => before.rotation[axis] !== 0)) {
-      collaborationHandlers.onEntityChanged?.(entityRegistry.serializeEntity(entity.id), { continuous: false });
+      collaborationHandlers.onEntityChanged?.(entityRegistry.serializeEntity(entity.id), { continuous: false, before });
     }
   }
 

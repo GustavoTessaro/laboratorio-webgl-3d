@@ -143,34 +143,38 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         return stored;
     }
 
-    public async Task<EntityDto> UpdateEntity(EntityDto entity, bool final)
+    public async Task UpdateEntity(EntityEditDto edit)
     {
+        if (edit?.Before is null || edit.After is null)
+            throw new HubException("Edição rejeitada. Informe a base e a intenção de edição.");
         EntityDto stored;
         try
         {
-            stored = await persistence.UpdateEntityAsync(Context.ConnectionId, entity, final);
+            stored = await persistence.UpdateEntityAsync(Context.ConnectionId, edit.After, edit.Final, edit.Before);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException($"Edição rejeitada. {exception.Message}");
         }
         catch (RoomPersistenceException exception)
         {
             var authoritative = exception.RequiresReconciliation
                 ? null
-                : store.GetEntity(entity.Id);
+                : store.GetEntity(edit.After.Id);
             if (authoritative is not null)
             {
                 await Clients.Group(CollaborationProtocol.RoomId)
                     .SendAsync("EntityUpserted", authoritative);
             }
 
-            throw new HubException(exception.Message);
+            throw new HubException(exception.RequiresReconciliation || !persistence.IsReady
+                ? $"Edição pendente. {exception.Message}" : $"Edição rejeitada. {exception.Message}");
         }
 
-        await Clients.OthersInGroup(CollaborationProtocol.RoomId).SendAsync("EntityUpserted", stored);
-        if (final)
-        {
-            await Clients.Caller.SendAsync("EntityUpserted", stored);
-        }
-
-        return stored;
+        if (edit.Final)
+            await Clients.Group(CollaborationProtocol.RoomId).SendAsync("EntityUpserted", stored);
+        else
+            await Clients.OthersInGroup(CollaborationProtocol.RoomId).SendAsync("EntityPreviewed", stored);
     }
 
     public async Task DeleteEntity(string entityId)
