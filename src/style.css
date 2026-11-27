@@ -693,6 +693,71 @@ h1 {
   display: none;
 }
 
+.inspection-group {
+  margin-top: 8px;
+  padding: 0 8px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.inspection-group > summary {
+  padding-block: 10px;
+  color: #c7cedb;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inspection-readout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 5px 8px;
+  margin: 4px 0 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspection-readout dt {
+  color: var(--text-muted);
+}
+
+.inspection-readout dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #e3e9ff;
+}
+
+.inspection-matrix {
+  width: 100%;
+  table-layout: fixed;
+  margin-bottom: 10px;
+  border-collapse: collapse;
+  text-align: right;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspection-matrix caption {
+  padding-bottom: 4px;
+  color: #c7cedb;
+  text-align: left;
+}
+
+.inspection-matrix td {
+  padding: 4px 2px;
+  border: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.inspection-history {
+  display: block;
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #191e28;
+}
+
 .particle-seed {
   display: grid;
   gap: 5px;

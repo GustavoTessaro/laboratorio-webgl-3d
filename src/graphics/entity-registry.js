@@ -647,6 +647,15 @@ export function createEntityRegistry(scene, texturePool = createTexturePool()) {
     setSelectionChangeHandler,
     getEntity,
     getEntities,
+    count: () => entities.size,
+    readBaseTransform(id, target) {
+      const transform = validTransforms.get(id);
+      if (!transform) return false;
+      target.position.copy(transform.position);
+      target.rotation.copy(transform.rotation);
+      target.scale.copy(transform.scale);
+      return true;
+    },
     getSelectedEntity,
     getSelectedEntityOrThrow,
     selectEntity,

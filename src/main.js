@@ -9,6 +9,7 @@ import { bindLightingControls } from './lighting-controls.js';
 import { createLightingSession } from './lighting-session.js';
 import { createRoomSettingsSession } from './room-settings-session.js';
 import { bindParticleControls } from './particle-controls.js';
+import { bindInspectorControls } from './inspector-controls.js';
 import { changeParticles, EMPTY_PARTICLES, sameParticleSettings } from './graphics/particle-settings.js';
 
 const container = document.querySelector('#scene-container');
@@ -97,6 +98,7 @@ try {
   const particleControls = bindParticleControls(
     document.querySelector('.particle-controls'), particleSession, sceneControls.particles, signal,
   );
+  bindInspectorControls(document.querySelector('[data-graphics-inspector]'), sceneControls.inspector, signal);
 
   disposePage = () => {
     pageLifetime.abort();

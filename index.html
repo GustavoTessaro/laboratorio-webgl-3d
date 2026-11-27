@@ -379,6 +379,44 @@
               Restaurar orientação
             </button>
           </details>
+          <details class="control-category inspector-controls" data-graphics-inspector>
+            <summary class="control-section-title">Inspetor de Computação Gráfica</summary>
+            <p class="geometry-description" data-inspector-empty>Selecione um objeto para inspecionar a malha. Os dados da câmera e da cena continuam disponíveis.</p>
+
+            <details class="inspection-group" open>
+              <summary>Geometria</summary>
+              <dl class="inspection-readout" data-inspector-geometry></dl>
+              <p class="geometry-description">Um vértice armazenado pode repetir uma posição com UV ou normal diferente. Posições únicas são agrupadas na precisão de 0,000001 unidade.</p>
+              <p class="geometry-description">A caixa e a esfera medem os vértices da malha no espaço local. A caixa conservadora é usada para limitar o posicionamento na cena.</p>
+            </details>
+
+            <details class="inspection-group" open>
+              <summary>Auxiliares visuais</summary>
+              <label class="custom-color-control"><span>Vértices</span><input type="checkbox" data-inspector-overlay="vertices" disabled /></label>
+              <label class="custom-color-control"><span>Normais dos vértices</span><input type="checkbox" data-inspector-overlay="normals" disabled /></label>
+              <label class="custom-color-control"><span>Arestas dos triângulos</span><input type="checkbox" data-inspector-overlay="edges" disabled /></label>
+              <label class="custom-color-control"><span>Caixa envolvente</span><input type="checkbox" data-inspector-overlay="box" disabled /></label>
+              <label class="custom-color-control"><span>Esfera envolvente</span><input type="checkbox" data-inspector-overlay="sphere" disabled /></label>
+              <p class="geometry-description" data-inspector-sampling></p>
+              <p class="geometry-description">A esfera local acompanha a escala e pode aparecer como elipsoide. As arestas são uma sobreposição independente do material.</p>
+            </details>
+
+            <details class="inspection-group" data-inspector-transforms>
+              <summary>Transformações e matrizes</summary>
+              <p class="geometry-description">A matriz local combina escala, rotação e translação (T × R × S). A matriz global leva as coordenadas da malha ao mundo. A base é o estado editável, e a pose visual inclui a animação.</p>
+              <dl class="inspection-readout" data-inspector-pose></dl>
+              <p class="geometry-description">A matriz de visualização leva o mundo às coordenadas da câmera. A projeção leva essas coordenadas ao volume de recorte. As tabelas mostram linhas e colunas matemáticas.</p>
+              <div data-inspector-matrices></div>
+            </details>
+
+            <details class="inspection-group" open>
+              <summary>Desempenho da cena</summary>
+              <dl class="inspection-readout" data-inspector-performance></dl>
+              <canvas class="inspection-history" data-inspector-history width="220" height="44" role="img" aria-label="Histórico recente dos intervalos entre quadros"></canvas>
+              <p class="geometry-description">Histórico dos últimos 60 intervalos de quadro, com escala vertical automática.</p>
+              <p class="geometry-description">Os contadores do renderer referem-se à renderização principal e podem incluir auxiliares. Objetos, partículas e luzes são contagens da cena. Recursos contabilizados não indicam bytes de memória.</p>
+            </details>
+          </details>
           <p class="panel-footer">INTERAJA COM A CENA USANDO O MOUSE OU TOQUE</p>
         </aside>
       </main>

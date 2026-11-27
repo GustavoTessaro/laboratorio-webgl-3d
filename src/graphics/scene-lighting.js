@@ -125,6 +125,7 @@ export function createSceneLighting(scene, maxTextureSize = 4096) {
   return {
     apply,
     setHelper,
+    countActive: () => Object.values(lights).filter((light) => light.visible).length,
     dispose() {
       for (const helper of [...helpers.values(), ...shadowHelpers.values()]) {
         helper.removeFromParent();

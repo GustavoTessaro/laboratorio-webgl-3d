@@ -149,6 +149,11 @@ export function createParticleSystem(scene, pointSizeLimit = 64, pixelRatio = 1)
       if (emitter) emitter.playing = playing;
     },
     isPlaying(id) { return emitters.get(id)?.playing ?? false; },
+    countVisible() {
+      let count = 0;
+      for (const { config } of emitters.values()) if (config.enabled) count += config.count;
+      return count;
+    },
     restart(id) {
       const emitter = emitters.get(id);
       if (!emitter) return;

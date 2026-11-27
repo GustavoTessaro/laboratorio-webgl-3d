@@ -62,6 +62,10 @@ test('disposing the scene stops rendering and releases its owned resources silen
   controls.setTransformMode('scale');
   controls.setCoordinateHelper('world', true);
   controls.setCoordinateHelper('local', true);
+  controls.inspector.setOpen(true);
+  controls.inspector.setOverlay('vertices', true);
+  controls.inspector.setOverlay('edges', true);
+  controls.inspector.setSampleHandler((sample) => assert.equal(sample.facts.triangles, 12));
   assert.deepEqual(controls.getSharedEntities(), before);
   controls.setEntityPresence(entity.id, 'Ana');
   loop();

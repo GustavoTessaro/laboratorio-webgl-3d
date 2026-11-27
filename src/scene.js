@@ -5,6 +5,7 @@ import { createSceneLighting } from './graphics/scene-lighting.js';
 import { createViewCamera } from './graphics/view-camera.js';
 import { createCoordinateHelpers } from './graphics/coordinate-helpers.js';
 import { createParticleSystem } from './graphics/particle-system.js';
+import { createGraphicsInspector } from './graphics/graphics-inspector.js';
 import { SOLID_MATERIAL } from './graphics/object-materials.js';
 
 export { createEntityRegistry, bindTransformEditing, synchronizeTransformTarget };
@@ -375,6 +376,13 @@ export function createScene(container, {
   const context = renderer.getContext?.();
   const pointSizeLimit = context?.getParameter?.(context.ALIASED_POINT_SIZE_RANGE)?.[1];
   const particles = createParticleSystem(scene, pointSizeLimit, renderer.getPixelRatio?.());
+  const inspector = createGraphicsInspector(scene, {
+    renderer,
+    readBaseTransform: entityRegistry.readBaseTransform,
+    countObjects: entityRegistry.count,
+    countParticles: particles.countVisible,
+    countLights: lighting.countActive,
+  });
 
   function toggleRotation() {
     const entity = entityRegistry.getSelectedEntityOrThrow();
@@ -445,7 +453,9 @@ export function createScene(container, {
       sprite.position.set(presenceCenter.x, presenceBounds.max.y + 0.3, presenceCenter.z);
     }
     controls.update();
+    inspector.beforeRender(selectedEntity);
     renderer.render(scene, cameraView.camera);
+    inspector.afterRender(cameraView.camera);
   }
 
   renderer.setAnimationLoop(render);
@@ -466,6 +476,7 @@ export function createScene(container, {
     controls.dispose();
     cameraView.dispose();
     coordinates.dispose();
+    inspector.dispose();
     for (const id of presenceLabels.keys()) removePresenceLabel(id);
     entityRegistry.dispose();
     selectionHelper.removeFromParent();
@@ -510,6 +521,7 @@ export function createScene(container, {
     applyLighting: lighting.apply,
     setLightingHelper: lighting.setHelper,
     particles,
+    inspector,
     toggleRotation,
     setRotationSpeed,
     setRotationAxis,

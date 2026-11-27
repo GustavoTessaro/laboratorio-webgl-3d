@@ -43,6 +43,7 @@
 - [x] V2-06 implementada e validada com WebGL, duas sessões SignalR e recuperação em SQLite.
 - [x] V2-07 implementada e validada com WebGL, duas sessões independentes e transformações compartilhadas.
 - [x] V2-08 implementada e validada com quatro efeitos, SignalR local e recuperação em SQLite.
+- [x] V2-09 implementada e validada com testes automatizados e Chrome headless. Medições em hardware real permanecem pendentes.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
 - [x] A fonte de partículas da V2-08 é o recurso avançado demonstrável.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
@@ -179,3 +180,18 @@ O protocolo passa para **5**, de modo que participantes na mesma sala possam obs
 - [x] Chrome headless com WebGL verificou os quatro efeitos, prévia da fonte, pausa local, ativação e remoção compartilhadas, duas projeções, textura, sombra, recuperação após reinício e modo local. A amostra no orçamento de 12.000 pontos não gerou invocações SignalR.
 - [x] Uma amostra de 90 intervalos de quadro em Chrome headless com SwiftShader, canvas de 808 × 567, câmera ortográfica, 12.000 pontos, uma malha texturizada e sombra direcional registrou mediana de 33,4 ms e percentil 95 de 38,1 ms. São intervalos entre quadros do cenário completo em renderização por software.
 - [ ] Medir em GPU e dispositivos móveis reais. Verificar sobreposição transparente em cenas densas, controles por toque e publicação em SQL Server de teste.
+
+## V2-09 — Inspetor de Computação Gráfica
+
+- O inspetor lê os atributos reais das treze geometrias. Conta os vértices armazenados no atributo `position`, agrupa posições por coordenadas arredondadas a seis casas decimais e calcula triângulos a partir dos índices ou dos vértices, conforme a topologia.
+- Os auxiliares são locais e independentes da seleção e do material. Vértices e normais usam amostras de até 512 elementos cada. As normais usam a inversa transposta da transformação visual para respeitar escala não uniforme. A caixa segue a orientação da malha e a esfera local torna-se um elipsoide visual sob escala não uniforme. Ambas são calculadas a partir da geometria e independem dos limites conservadores de posicionamento.
+- As matrizes são apresentadas em linhas e colunas matemáticas a partir do armazenamento column-major. A matriz base vem do registro de objetos e as matrizes local e global acompanham a pose renderizada. As matrizes da câmera ativa e as estatísticas permanecem disponíveis sem seleção.
+- A interface atualiza até cinco vezes por segundo e usa os 60 intervalos recentes de quadro. Com o inspetor recolhido, os auxiliares ficam ocultos e a coleta é suspensa. O cache reaproveita buffers e descarta os recursos na troca de geometria, seleção ou encerramento. Os totais do `renderer.info` correspondem ao passe principal na configuração atual do Three.js, podem incluir auxiliares e ficam separados das contagens lógicas de objetos, luzes e partículas.
+- Preferências, matrizes e estatísticas ficam no cliente. Contratos, protocolo e persistência compartilhada permanecem compatíveis com as etapas anteriores.
+
+### Resultados e pendências
+
+- [x] 47 testes JavaScript e 41 testes .NET aprovados. Build .NET concluído sem avisos. Build Vite concluído com os avisos de anotações do SignalR e de tamanho do bundle.
+- [x] Chrome headless com WebGL verificou as treze geometrias, cinco auxiliares nas duas projeções, alteração de parâmetros, pose animada com matriz base estável, estatísticas com sombras e partículas, painel em viewport móvel e cena vazia. Duas sessões SignalR locais mantiveram preferências independentes, sem invocações do inspetor.
+- [x] Medição em Chrome headless com SwiftShader, canvas de 808 × 567, 13 malhas, esfera animada, 1.000 partículas e sombra direcional. Em 60 intervalos por condição, o painel recolhido registrou mediana de 37,9 ms, percentil 95 de 42,5 ms e 29 draw calls. Aberto com os cinco auxiliares, registrou 43,6 ms, 48,8 ms e 34 draw calls. Os resultados abrangem a cena inteira com renderização por software.
+- [ ] Medir o impacto dos auxiliares em GPU e dispositivos móveis reais e validar a operação por toque.
