@@ -4,7 +4,7 @@ import {
   LogLevel,
 } from '@microsoft/signalr';
 
-export const COLLABORATION_PROTOCOL_VERSION = 3;
+export const COLLABORATION_PROTOCOL_VERSION = 4;
 export const COLLABORATION_ROOM_ID = 'laboratorio-principal';
 const HUB_URL = import.meta.env.VITE_COLLABORATION_URL?.trim()
   || (import.meta.env.DEV ? 'http://localhost:5080/hubs/laboratory' : null);
@@ -48,6 +48,7 @@ export class CollaborationClient {
     this.connection.on('ParticipantLeft', (participantId) => this.handlers.onParticipantLeft?.(participantId));
     this.connection.on('EntityUpserted', (entity) => this.handlers.onEntityUpserted?.(entity));
     this.connection.on('EntityDeleted', (entityId) => this.handlers.onEntityDeleted?.(entityId));
+    this.connection.on('RoomLightingChanged', (state) => this.handlers.onLighting?.(state));
     this.connection.on('LockChanged', (editLock) => this.handlers.onLockChanged?.(editLock));
     this.connection.on('LockExpired', (editLock) => this.handlers.onLockChanged?.(editLock));
     this.connection.onreconnecting(() => {
@@ -209,6 +210,10 @@ export class CollaborationClient {
 
   async updateEntity(entity, final = false) {
     return this.connection.invoke('UpdateEntity', entity, final);
+  }
+
+  updateLighting({ group, patch }) {
+    return this.connection.invoke('UpdateLighting', group, patch);
   }
 
   async deleteEntity(entityId) {

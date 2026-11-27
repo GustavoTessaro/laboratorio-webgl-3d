@@ -15,6 +15,7 @@ public sealed class RoomDbContext(DbContextOptions<RoomDbContext> options) : DbC
             entity.HasKey(room => room.RoomId);
             entity.Property(room => room.RoomId).HasMaxLength(128);
             entity.Property(room => room.UpdatedAtUtc).IsRequired();
+            entity.Property(room => room.LightingJson).HasMaxLength(2048);
         });
 
         modelBuilder.Entity<RoomEntityRecord>(entity =>
@@ -43,6 +44,7 @@ public sealed class RoomRecord
 {
     public string RoomId { get; set; } = string.Empty;
     public DateTime UpdatedAtUtc { get; set; }
+    public string? LightingJson { get; set; }
 }
 
 public sealed class RoomEntityRecord

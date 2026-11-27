@@ -18,6 +18,7 @@ public sealed class RoomStateStore
     private readonly Dictionary<string, EntityLock> _locks = new(StringComparer.Ordinal);
     private readonly TimeProvider _timeProvider;
     private bool _initialized;
+    private RoomLightingDto _lighting = LightingSettings.Default;
 
     public RoomStateStore() : this(TimeProvider.System)
     {
@@ -39,7 +40,8 @@ public sealed class RoomStateStore
         }
     }
 
-    public void InitializeFromPersistence(IEnumerable<EntityDto> entities, bool initialized)
+    public void InitializeFromPersistence(
+        IEnumerable<EntityDto> entities, bool initialized, RoomLightingDto? lighting = null)
     {
         ArgumentNullException.ThrowIfNull(entities);
         lock (_sync)
@@ -59,7 +61,22 @@ public sealed class RoomStateStore
             }
 
             _initialized = initialized;
+            _lighting = lighting ?? LightingSettings.Default;
         }
+    }
+
+    public RoomLightingDto GetLighting(string? connectionId = null)
+    {
+        lock (_sync)
+        {
+            if (connectionId is not null) RequireParticipant(connectionId);
+            return _lighting;
+        }
+    }
+
+    internal void SetLighting(RoomLightingDto lighting)
+    {
+        lock (_sync) _lighting = lighting;
     }
 
     public EntityDto? GetEntity(string entityId)
@@ -463,7 +480,8 @@ public sealed class RoomStateStore
             _locks.Where(entry => entry.Value.ExpiresAt > _timeProvider.GetUtcNow()).Select(entry => new EditLockDto(
                 entry.Key,
                 entry.Value.ParticipantId,
-                entry.Value.ParticipantName)).ToArray());
+                entry.Value.ParticipantName)).ToArray(),
+            _lighting);
     }
 
     private IReadOnlyList<EditLockDto> ExpireLocksUnsafe(Action<string>? discardPreview)

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Laboratorio.Collaboration.Contracts;
 using Laboratorio.Collaboration.Data;
 using Laboratorio.Collaboration.Services;
@@ -213,6 +214,93 @@ public sealed class RoomPersistenceServiceTests
         await StartAndWaitAsync(restarted);
         var recovered = await restarted.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
         Assert.Equal(final, Assert.Single(recovered.Entities));
+    }
+
+    [Fact]
+    public async Task RoomLightingMigratesLegacyRoomsAndMergesConfirmedFieldsWithoutRedundantWrites()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var factory = CreateFactory(connection, interceptor);
+        var legacy = CreateBox();
+        await SeedLegacyEntityAsync(factory, legacy, "20261126235231_AddMaterialSettings");
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        await service.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
+        Assert.Equal(legacy, Assert.Single(original.Entities));
+        Assert.Equal(0, original.Lighting.Revision);
+        Assert.Equal(3, original.Lighting.Settings.GetProperty("directional").GetProperty("intensity").GetDouble());
+        var writes = interceptor.CommitCount;
+
+        var concurrent = await Task.WhenAll(
+            service.UpdateLightingAsync("ana", "directional", JsonSerializer.SerializeToElement(new { intensity = 4 })),
+            service.UpdateLightingAsync("bia", "directional", JsonSerializer.SerializeToElement(new { color = "#AABBCC" })));
+        Assert.All(concurrent, result => Assert.True(result.Changed));
+        var state = store.GetLighting();
+        Assert.Equal(2, state.Revision);
+        Assert.Equal(4, state.Settings.GetProperty("directional").GetProperty("intensity").GetDouble());
+        Assert.Equal("#aabbcc", state.Settings.GetProperty("directional").GetProperty("color").GetString());
+        Assert.Equal(writes + 2, interceptor.CommitCount);
+        var duplicate = await service.UpdateLightingAsync("ana", "directional",
+            JsonSerializer.SerializeToElement(new { intensity = 4 }));
+        Assert.False(duplicate.Changed);
+        Assert.Equal(writes + 2, interceptor.CommitCount);
+
+        await service.UpdateLightingAsync("bia", "directional", JsonSerializer.SerializeToElement(new { intensity = 5 }));
+        interceptor.ThrowAfterNextCommit();
+        var floor = await service.UpdateLightingAsync("ana", "environment",
+            JsonSerializer.SerializeToElement(new { floorVisible = true, gridVisible = false }));
+        Assert.True(floor.Changed);
+        Assert.Equal(4, floor.State.Revision);
+        Assert.Equal(writes + 4, interceptor.CommitCount);
+
+        var restarted = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restarted);
+        var reopened = await restarted.JoinAsync("caio", "Caio", CollaborationProtocol.Version, []);
+        Assert.Equal(4, reopened.Lighting.Revision);
+        Assert.True(JsonElement.DeepEquals(floor.State.Settings, reopened.Lighting.Settings));
+        Assert.Equal(legacy, Assert.Single(reopened.Entities));
+        var lightReset = await restarted.UpdateLightingAsync("caio", "directional", null);
+        Assert.Equal(3, lightReset.State.Settings.GetProperty("directional").GetProperty("intensity").GetDouble());
+        Assert.True(lightReset.State.Settings.GetProperty("environment").GetProperty("floorVisible").GetBoolean());
+        var reset = await restarted.UpdateLightingAsync("caio", null, null);
+        Assert.True(JsonElement.DeepEquals(original.Lighting.Settings, reset.State.Settings));
+        Assert.False((await restarted.UpdateLightingAsync("caio", null, null)).Changed);
+        Assert.Equal(writes + 6, interceptor.CommitCount);
+    }
+
+    [Fact]
+    public async Task RoomLightingRejectsNonParticipantsAndInvalidPatchesBeforeWriting()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var store = new RoomStateStore();
+        var service = CreateService(CreateFactory(connection, interceptor), store);
+        await StartAndWaitAsync(service);
+        await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        var writes = interceptor.CommitCount;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateLightingAsync("guest", null, null));
+        foreach (var (group, invalid) in new[]
+        {
+            ("ambient", """{"x":1}"""),
+            ("ambient", """{"enabled":1}"""),
+            ("hemisphere", """{"groundColor":"red"}"""),
+            ("spot", """{"angle":120}"""),
+            ("spot", """{"penumbra":1.1}"""),
+            ("point", """{"distance":0.1}"""),
+            ("directional", """{"x":0,"y":0,"z":0}"""),
+            ("environment", """{"shadowQuality":"ultra"}"""),
+            ("environment", """{"floorVisible":true,"floorVisible":false}"""),
+        })
+        {
+            using var json = JsonDocument.Parse(invalid);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.UpdateLightingAsync("ana", group, json.RootElement));
+        }
+        Assert.Equal(writes, interceptor.CommitCount);
+        Assert.Equal(0, store.GetLighting().Revision);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Laboratorio.Collaboration.Contracts;
 using Laboratorio.Collaboration.Services;
 using Microsoft.AspNetCore.SignalR;
@@ -31,7 +32,22 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         await Groups.AddToGroupAsync(Context.ConnectionId, CollaborationProtocol.RoomId);
         await Clients.OthersInGroup(CollaborationProtocol.RoomId)
             .SendAsync("ParticipantJoined", snapshot.Participants.Single(p => p.Id == Context.ConnectionId));
-        return snapshot;
+        return snapshot with { Lighting = store.GetLighting() };
+    }
+
+    public async Task<RoomLightingDto> UpdateLighting(string? group, JsonElement? patch)
+    {
+        try
+        {
+            var (state, changed) = await persistence.UpdateLightingAsync(Context.ConnectionId, group, patch);
+            if (changed)
+                await Clients.Group(CollaborationProtocol.RoomId).SendAsync("RoomLightingChanged", state);
+            return state;
+        }
+        catch (Exception error) when (error is RoomPersistenceException or InvalidOperationException)
+        {
+            throw new HubException(error.Message);
+        }
     }
 
     public async Task<LockResultDto> AcquireEditLock(string entityId)

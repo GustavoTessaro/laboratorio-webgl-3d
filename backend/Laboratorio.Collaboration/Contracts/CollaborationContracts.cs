@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Laboratorio.Collaboration.Contracts;
@@ -62,17 +63,20 @@ public sealed record ParticipantDto(string Id, string Name);
 
 public sealed record EditLockDto(string EntityId, string ParticipantId, string ParticipantName);
 
+public sealed record RoomLightingDto(long Revision, JsonElement Settings);
+
 public sealed record RoomSnapshotDto(
     int ProtocolVersion,
     string RoomId,
     IReadOnlyCollection<EntityDto> Entities,
     IReadOnlyCollection<ParticipantDto> Participants,
-    IReadOnlyCollection<EditLockDto> Locks);
+    IReadOnlyCollection<EditLockDto> Locks,
+    RoomLightingDto Lighting);
 
 public sealed record LockResultDto(bool Granted, string? OwnerName = null, string? Reason = null);
 
 public static class CollaborationProtocol
 {
-    public const int Version = 3;
+    public const int Version = 4;
     public const string RoomId = "laboratorio-principal";
 }

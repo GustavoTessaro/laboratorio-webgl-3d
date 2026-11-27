@@ -1,0 +1,28 @@
+{
+  "ambient": { "enabled": false, "color": "#ffffff", "intensity": [0.7, 0, 5, 0.05] },
+  "hemisphere": {
+    "enabled": true, "color": "#dce7ff", "groundColor": "#303747", "intensity": [2, 0, 5, 0.05],
+    "x": [0, -20, 20, 0.1], "y": [1, -20, 20, 0.1], "z": [0, -20, 20, 0.1]
+  },
+  "directional": {
+    "enabled": true, "color": "#fff3dd", "intensity": [3, 0, 8, 0.05],
+    "x": [4, -20, 20, 0.1], "y": [7, -20, 20, 0.1], "z": [5, -20, 20, 0.1],
+    "targetX": [0, -10, 10, 0.1], "targetY": [0, 0, 10, 0.1], "targetZ": [0, -10, 10, 0.1],
+    "castShadow": true
+  },
+  "point": {
+    "enabled": false, "color": "#fff0d4", "intensity": [60, 0, 200, 1],
+    "x": [2, -20, 20, 0.1], "y": [4, -20, 20, 0.1], "z": [2, -20, 20, 0.1],
+    "distance": [0, 0, 45, 0.5], "decay": [2, 0, 3, 0.05], "castShadow": false
+  },
+  "spot": {
+    "enabled": false, "color": "#d9e6ff", "intensity": [90, 0, 200, 1],
+    "x": [-4, -20, 20, 0.1], "y": [7, -20, 20, 0.1], "z": [4, -20, 20, 0.1],
+    "targetX": [0, -10, 10, 0.1], "targetY": [0, 0, 10, 0.1], "targetZ": [0, -10, 10, 0.1],
+    "distance": [0, 0, 45, 0.5], "decay": [2, 0, 3, 0.05],
+    "angle": [35, 5, 85, 1], "penumbra": [0.3, 0, 1, 0.05], "castShadow": false
+  },
+  "environment": {
+    "floorVisible": false, "gridVisible": true, "floorColor": "#343d4d", "shadowQuality": "medium"
+  }
+}

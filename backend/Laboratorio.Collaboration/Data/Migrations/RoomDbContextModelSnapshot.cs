@@ -86,6 +86,9 @@ namespace Laboratorio.Collaboration.Data.Migrations
                     b.Property<string>("RoomId")
                         .HasMaxLength(128);
 
+                    b.Property<string>("LightingJson")
+                        .HasMaxLength(2048);
+
                     b.Property<DateTime>("UpdatedAtUtc");
 
                     b.HasKey("RoomId");

@@ -5,6 +5,8 @@ import { sameGeometryParameters } from './graphics/geometries.js';
 import { sameMaterialSettings } from './graphics/object-materials.js';
 import { createTransformPreviews } from './edit-gestures.js';
 import { createControlsPanel } from './controls-panel.js';
+import { bindLightingControls } from './lighting-controls.js';
+import { createLightingSession } from './lighting-session.js';
 
 const container = document.querySelector('#scene-container');
 const message = document.querySelector('#webgl-message');
@@ -64,11 +66,24 @@ try {
     },
   });
   const { syncSelectedEntity, renderEntityList, cancelLocalInputs } = panel;
+  const lightingSession = createLightingSession({
+    render(settings) {
+      if (signal.aborted) return;
+      sceneControls.applyLighting(settings);
+      lightingControls.sync(settings);
+    },
+    send: (command) => collaborationClient.updateLighting(command),
+    onError: (error) => lightingControls.report(error),
+  });
+  const lightingControls = bindLightingControls(
+    document.querySelector('.lighting-controls'), lightingSession, sceneControls.setLightingHelper, signal,
+  );
 
   disposePage = () => {
     pageLifetime.abort();
     for (const id of activeEdits.keys()) previews.end(id);
     activeEdits.clear();
+    lightingSession.leave();
     panel.dispose();
     sceneControls.dispose();
     void collaborationClient?.stop().catch(console.warn);
@@ -94,6 +109,8 @@ try {
     collaborationOpenButton.disabled = state === 'connected' || loading;
     collaborationSubmitButton.disabled = state === 'connected' || loading;
     if (state === 'disconnected' || state === 'reconnecting' || state === 'error') {
+      lightingControls.cancel();
+      lightingSession.pause();
       for (const id of activeEdits.keys()) previews.end(id);
       activeEdits.clear();
       sceneControls.cancelTransformEdit();
@@ -294,6 +311,8 @@ try {
     editLocks.clear();
     for (const lock of snapshot.locks) editLocks.set(lock.entityId, lock);
     sceneControls.applySharedSnapshot(snapshot.entities);
+    lightingControls.cancel();
+    lightingSession.resume(snapshot.lighting);
     for (const entity of snapshot.entities) updatePresence(entity.id);
     renderParticipants();
     void flushPendingOperations();
@@ -304,6 +323,7 @@ try {
     collaborationClient = new CollaborationClient({
       onStatus: setCollaborationStatus,
       onSnapshot: applyRoomSnapshot,
+      onLighting: lightingSession.accept,
       onParticipantJoined: (participant) => {
         participants.set(participant.id, participant);
         renderParticipants();
@@ -426,6 +446,7 @@ try {
     connectionAttemptId += 1;
     connectionAttemptInProgress = false;
     collaborationDialog.close();
+    lightingSession.leave();
     setCollaborationStatus('disconnected', 'Colaboração desconectada · modo local');
     if (collaborationClient) {
       void collaborationClient.stop().catch((error) => {

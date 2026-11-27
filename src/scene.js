@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createEntityRegistry } from './graphics/entity-registry.js';
 import { bindTransformEditing, createSceneControls, synchronizeTransformTarget } from './graphics/scene-controls.js';
-import { createLighting, WORKSPACE_SIZE } from './graphics/scene-assets.js';
+import { createSceneLighting } from './graphics/scene-lighting.js';
 import { SOLID_MATERIAL } from './graphics/object-materials.js';
 
 export { createEntityRegistry, bindTransformEditing, synchronizeTransformTarget };
@@ -341,11 +341,7 @@ export function createScene(container, {
     entityRegistry.setAppearance(entityRegistry.getSelectedEntityOrThrow(), SOLID_MATERIAL.color, 'solid', null);
   }
 
-  const grid = new THREE.GridHelper(WORKSPACE_SIZE, 40, '#68748a', '#343d4d');
-  grid.position.y = 0;
-  scene.add(grid);
-
-  const { dispose: disposeLighting, ...lightingControls } = createLighting(scene);
+  const lighting = createSceneLighting(scene, renderer.capabilities?.maxTextureSize);
 
   function toggleRotation() {
     const entity = entityRegistry.getSelectedEntityOrThrow();
@@ -438,9 +434,7 @@ export function createScene(container, {
     entityRegistry.dispose();
     selectionHelper.removeFromParent();
     selectionHelper.dispose();
-    grid.removeFromParent();
-    grid.dispose();
-    disposeLighting();
+    lighting.dispose();
     renderer.dispose();
     renderer.forceContextLoss();
     renderer.domElement.remove();
@@ -463,7 +457,8 @@ export function createScene(container, {
     setColor,
     setWireframe,
     resetAppearance,
-    ...lightingControls,
+    applyLighting: lighting.apply,
+    setLightingHelper: lighting.setHelper,
     toggleRotation,
     setRotationSpeed,
     setRotationAxis,

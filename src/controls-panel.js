@@ -18,19 +18,6 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   const materialButtons = root.querySelectorAll('[data-material-mode]');
   const customColorInput = root.querySelector('#custom-object-color');
   const resetAppearanceButton = root.querySelector('[data-reset-appearance]');
-  const lightingInputs = {
-    ambientIntensity: root.querySelector('#ambient-intensity'),
-    directionalIntensity: root.querySelector('#directional-intensity'),
-    directionalX: root.querySelector('#directional-x'),
-    directionalY: root.querySelector('#directional-y'),
-  };
-  const lightingOutputs = {
-    ambientIntensity: root.querySelector('#ambient-intensity-value'),
-    directionalIntensity: root.querySelector('#directional-intensity-value'),
-    directionalX: root.querySelector('#directional-x-value'),
-    directionalY: root.querySelector('#directional-y-value'),
-  };
-  const resetLightingButton = root.querySelector('[data-reset-lighting]');
   const rotationToggleButton = root.querySelector('[data-toggle-rotation]');
   const rotationStatus = root.querySelector('[data-animation-status]');
   const rotationSpeedInput = root.querySelector('#rotation-speed');
@@ -237,29 +224,6 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   resetAppearanceButton.addEventListener('click', () => {
     sceneControls.resetAppearance();
     syncSelectedEntity();
-  }, { signal });
-
-  const lightingSetters = {
-    ambientIntensity: sceneControls.setAmbientIntensity,
-    directionalIntensity: sceneControls.setDirectionalIntensity,
-    directionalX: sceneControls.setDirectionalX,
-    directionalY: sceneControls.setDirectionalY,
-  };
-
-  Object.entries(lightingInputs).forEach(([key, input]) => {
-    input.addEventListener('input', () => {
-      const value = Number(input.value);
-      lightingSetters[key](value);
-      lightingOutputs[key].value = value.toFixed(1).replace('.', ',');
-    }, { signal });
-  });
-
-  resetLightingButton.addEventListener('click', () => {
-    const defaults = sceneControls.resetLighting();
-    Object.entries(defaults).forEach(([key, value]) => {
-      lightingInputs[key].value = String(value);
-      lightingOutputs[key].value = value.toFixed(1).replace('.', ',');
-    });
   }, { signal });
 
   rotationToggleButton.addEventListener('click', () => {

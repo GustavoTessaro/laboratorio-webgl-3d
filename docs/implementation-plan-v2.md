@@ -40,6 +40,7 @@
 - [x] V2-03 implementada e validada nas suítes automatizadas e no Chrome headless em modo local.
 - [x] V2-04 implementada e validada com WebGL, SignalR local e migração SQLite.
 - [x] V2-05 implementada e validada com WebGL, SignalR local e recuperação após reinício com SQLite.
+- [x] V2-06 implementada e validada com WebGL, duas sessões SignalR e recuperação em SQLite.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
 - [ ] Pelo menos um recurso avançado demonstrável em V2-08 ou V2-10.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
@@ -117,3 +118,24 @@ O protocolo passa para **3**. Um cliente V2 enviaria o objeto inteiro sem as nov
 - [x] SQL Server com script idempotente gerado e modelo conferido no EF. A execução da migração em SQL Server permanece pendente.
 - [x] Chrome headless com WebGL validou a renderização dos três materiais, oito miniaturas, texturas em cubo e esfera, controles contextuais, transparência, prévias locais, confirmação em duas sessões SignalR e recuperação após reiniciar o backend. O modo local foi exercitado com aplicação de textura e reset de aparência.
 - [ ] Conferir ordenação visual de objetos transparentes sobrepostos, toque e teclado em dispositivo real. Ensaiar publicação e retorno em SQL Server de teste.
+
+## Registro da V2-06
+
+A categoria Iluminação reúne ambiente, hemisférica, direcional, pontual e focal. Cada luz pode ser ativada e restaurada separadamente. A hemisférica e a direcional conservam as cores, intensidades e posições anteriores. As demais começam desativadas, o piso começa oculto e a grade permanece visível. O piso receptor fica 0,015 unidade abaixo da grade e tem cor própria. Os auxiliares permanecem no navegador, fora da seleção de objetos e do estado compartilhado. A câmera de sombra pode ser visualizada para a direcional e a focal. A sombra da pontual cobre seis direções e o auxiliar mostra a luz, sem exibir apenas uma face da câmera como se representasse toda a projeção.
+
+O [catálogo compartilhado](../backend/Laboratorio.Collaboration/Contracts/LightingCatalog.json) define os padrões e limites da interface e da validação do servidor. Os níveis baixo, médio e alto usam respectivamente 512/1024/2048 para direcional, 512/1024/1024 para focal e 128/256/256 por face para pontual. Há um teto adicional pela capacidade do renderer. A câmera direcional enquadra a área de trabalho e as câmeras de perspectiva acompanham o alcance. Bias negativo e normalBias positivo reduzem artefatos. Mudança de resolução ou desligamento descarta o mapa anterior. O encerramento libera luzes, auxiliares, mapas e geometria e material do piso.
+
+### Colaboração e publicação
+
+A iluminação e o ambiente têm revisão própria no snapshot da sala. Um gesto contínuo usa prévia local e envia um comando ao confirmar uma alteração efetiva. A prévia é descartada ao desconectar. Confirmações pendentes são reenviadas após a reconexão com a sala. O servidor serializa a gravação, combina alterações em campos distintos e usa a última confirmação para o mesmo campo. Um reset substitui o grupo inteiro ou toda a iluminação. O cliente ignora revisões atrasadas. O modo local permite simular livremente. Ao ingressar numa sala, seu snapshot é a referência compartilhada.
+
+O protocolo passa para **4** para que clientes na mesma sala observem também as mudanças de iluminação. A migração `20261127000611_AddRoomLighting` acrescenta `LightingJson` a `Rooms`, como `TEXT` em SQLite e `nvarchar(2048)` em SQL Server, com valor nulo permitido. Salas antigas usam os padrões. O servidor só atualiza o estado confirmado após comprovar a gravação e mantém a recuperação por leitura quando a confirmação do SQL é incerta. Para publicar, revisar e ensaiar o script idempotente de `AddMaterialSettings` até `AddRoomLighting` com SQL Server, validar a leitura das salas existentes após backup e publicar backend e frontend em janela coordenada. O `Down` remove apenas a coluna de iluminação, incluindo suas configurações.
+
+### Resultados e pendências
+
+- [x] JavaScript com 28 testes, incluindo configuração das cinco luzes, validação, restauração, projeção e recursos de sombra, descarte, prévias, revisões concorrentes e reconexão.
+- [x] Build Vite concluído com os avisos de anotações do SignalR e tamanho do bundle. Build .NET concluído com zero avisos e 39 testes aprovados.
+- [x] SQLite validou migração de sala legada, mesclagem de campos concorrentes, ausência de gravações repetidas, confirmação de uma escrita com resposta perdida e recuperação após reinício.
+- [x] O EF gerou o script idempotente para SQL Server e confirmou o modelo. A aplicação em SQL Server de teste permanece pendente.
+- [x] Chrome headless com WebGL verificou cinco fontes simultâneas, sombras na direção, no foco e na pontual, diferenças de pixels no piso ao alternar a sombra, Basic sem resposta à direcional e resposta de Phong e Standard. Dois clientes verificaram prévia local, atualizações concorrentes, auxiliares individuais e recuperação depois de reiniciar o backend.
+- [ ] Medir o custo das sombras simultâneas em hardware real, especialmente as seis direções da pontual. Conferir artefatos de sombra, controles em dispositivos de toque e publicação coordenada em SQL Server de teste.

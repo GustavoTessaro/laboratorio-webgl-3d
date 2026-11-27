@@ -97,20 +97,7 @@ public sealed class RoomPersistenceService(
             {
                 await context.Database.MigrateAsync(cancellationToken);
             }
-            var roomId = CollaborationProtocol.RoomId;
-            var roomExists = await context.Rooms
-                .AsNoTracking()
-                .AnyAsync(room => room.RoomId == roomId, cancellationToken);
-            var records = roomExists
-                ? await context.RoomEntities
-                    .AsNoTracking()
-                    .Where(entity => entity.RoomId == roomId)
-                    .ToListAsync(cancellationToken)
-                : [];
-            var entities = records.Select(ToDto).ToArray();
-
-            store.InitializeFromPersistence(entities, roomExists);
-            ReplacePersistedEntities(entities);
+            ApplyPersistedState(await ReadPersistedRoomAsync(context, cancellationToken));
             _isReady = true;
         }
         finally
@@ -131,19 +118,7 @@ public sealed class RoomPersistenceService(
             var before = store.GetSnapshot();
             previousEntities = before.Entities;
             previousLocks = before.Locks;
-            await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-            var roomExists = await context.Rooms
-                .AsNoTracking()
-                .AnyAsync(room => room.RoomId == CollaborationProtocol.RoomId, cancellationToken);
-            var records = roomExists
-                ? await context.RoomEntities
-                    .AsNoTracking()
-                    .Where(entity => entity.RoomId == CollaborationProtocol.RoomId)
-                    .ToListAsync(cancellationToken)
-                : [];
-            var entities = records.Select(ToDto).ToArray();
-            store.InitializeFromPersistence(entities, roomExists);
-            ReplacePersistedEntities(entities);
+            ApplyPersistedState(await ReadPersistedRoomAsync(cancellationToken));
             persistedSnapshot = store.GetSnapshot();
             TrackReconciliationChanges(previousEntities, previousLocks, persistedSnapshot);
             foreach (var entityId in _pendingEntityReconciliations)
@@ -225,6 +200,9 @@ public sealed class RoomPersistenceService(
         {
             return;
         }
+
+        await hubContext.Clients.Group(CollaborationProtocol.RoomId)
+            .SendAsync("RoomLightingChanged", store.GetLighting(), cancellationToken);
 
         foreach (var entityId in _pendingDeletes)
         {
@@ -312,21 +290,28 @@ public sealed class RoomPersistenceService(
     private async Task<PersistedRoomState> ReadPersistedRoomAsync(CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var roomExists = await context.Rooms
+        return await ReadPersistedRoomAsync(context, cancellationToken);
+    }
+
+    private static async Task<PersistedRoomState> ReadPersistedRoomAsync(
+        RoomDbContext context, CancellationToken cancellationToken)
+    {
+        var room = await context.Rooms
             .AsNoTracking()
-            .AnyAsync(room => room.RoomId == CollaborationProtocol.RoomId, cancellationToken);
-        var records = roomExists
+            .SingleOrDefaultAsync(room => room.RoomId == CollaborationProtocol.RoomId, cancellationToken);
+        var records = room is not null
             ? await context.RoomEntities
                 .AsNoTracking()
                 .Where(entity => entity.RoomId == CollaborationProtocol.RoomId)
                 .ToListAsync(cancellationToken)
             : [];
-        return new PersistedRoomState(roomExists, records.Select(ToDto).ToArray());
+        return new PersistedRoomState(room is not null, records.Select(ToDto).ToArray(),
+            LightingSettings.FromStorage(room?.LightingJson));
     }
 
     private void ApplyPersistedState(PersistedRoomState persistedState)
     {
-        store.InitializeFromPersistence(persistedState.Entities, persistedState.RoomExists);
+        store.InitializeFromPersistence(persistedState.Entities, persistedState.RoomExists, persistedState.Lighting);
         ReplacePersistedEntities(persistedState.Entities);
     }
 
@@ -402,7 +387,7 @@ public sealed class RoomPersistenceService(
 
     }
 
-    private sealed record PersistedRoomState(bool RoomExists, EntityDto[] Entities);
+    private sealed record PersistedRoomState(bool RoomExists, EntityDto[] Entities, RoomLightingDto Lighting);
 
     private static bool IsTransientDatabaseFailure(Exception exception)
     {
@@ -462,6 +447,55 @@ public sealed class RoomPersistenceService(
                     "Não foi possível salvar o cenário inicial.");
                 return snapshot;
             }
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public async Task<(RoomLightingDto State, bool Changed)> UpdateLightingAsync(
+        string connectionId, string? group, JsonElement? patch)
+    {
+        await _writeLock.WaitAsync();
+        try
+        {
+            EnsureReady();
+            var current = store.GetLighting(connectionId);
+            var settings = LightingSettings.Apply(current.Settings, group, patch);
+            if (JsonElement.DeepEquals(current.Settings, settings))
+                return (current, false);
+
+            var next = new RoomLightingDto(checked(current.Revision + 1), settings);
+            try
+            {
+                await using var context = await contextFactory.CreateDbContextAsync();
+                var room = await context.Rooms.SingleAsync(item => item.RoomId == CollaborationProtocol.RoomId);
+                room.LightingJson = JsonSerializer.Serialize(next);
+                room.UpdatedAtUtc = DateTime.UtcNow;
+                await context.SaveChangesAsync();
+            }
+            catch (Exception writeException)
+            {
+                RoomLightingDto persisted;
+                try
+                {
+                    await using var context = await contextFactory.CreateDbContextAsync();
+                    var room = await context.Rooms.AsNoTracking()
+                        .SingleAsync(item => item.RoomId == CollaborationProtocol.RoomId);
+                    persisted = LightingSettings.FromStorage(room.LightingJson);
+                }
+                catch (Exception verificationException)
+                {
+                    MarkStateUncertain();
+                    throw CreatePersistenceException("Não foi possível confirmar a gravação da iluminação.",
+                        new AggregateException(writeException, verificationException), requiresReconciliation: true);
+                }
+                if (persisted.Revision != next.Revision || !JsonElement.DeepEquals(persisted.Settings, next.Settings))
+                    throw CreatePersistenceException("Não foi possível persistir a iluminação.", writeException);
+            }
+            store.SetLighting(next);
+            return (next, true);
         }
         finally
         {
