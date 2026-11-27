@@ -7,6 +7,9 @@ import { createTransformPreviews } from './edit-gestures.js';
 import { createControlsPanel } from './controls-panel.js';
 import { bindLightingControls } from './lighting-controls.js';
 import { createLightingSession } from './lighting-session.js';
+import { createRoomSettingsSession } from './room-settings-session.js';
+import { bindParticleControls } from './particle-controls.js';
+import { changeParticles, EMPTY_PARTICLES, sameParticleSettings } from './graphics/particle-settings.js';
 
 const container = document.querySelector('#scene-container');
 const message = document.querySelector('#webgl-message');
@@ -78,12 +81,29 @@ try {
   const lightingControls = bindLightingControls(
     document.querySelector('.lighting-controls'), lightingSession, sceneControls.setLightingHelper, signal,
   );
+  const particleSession = createRoomSettingsSession({
+    initial: EMPTY_PARTICLES,
+    change: changeParticles,
+    equal: sameParticleSettings,
+    stateValue: (snapshot) => snapshot.effects,
+    render(settings) {
+      if (signal.aborted) return;
+      sceneControls.particles.apply(settings);
+      particleControls.sync(settings);
+    },
+    send: (command) => collaborationClient.updateParticles(command),
+    onError: (error) => particleControls.report(error),
+  });
+  const particleControls = bindParticleControls(
+    document.querySelector('.particle-controls'), particleSession, sceneControls.particles, signal,
+  );
 
   disposePage = () => {
     pageLifetime.abort();
     for (const id of activeEdits.keys()) previews.end(id);
     activeEdits.clear();
     lightingSession.leave();
+    particleSession.leave();
     panel.dispose();
     sceneControls.dispose();
     void collaborationClient?.stop().catch(console.warn);
@@ -111,6 +131,8 @@ try {
     if (state === 'disconnected' || state === 'reconnecting' || state === 'error') {
       lightingControls.cancel();
       lightingSession.pause();
+      particleControls.cancel();
+      particleSession.pause();
       for (const id of activeEdits.keys()) previews.end(id);
       activeEdits.clear();
       sceneControls.cancelTransformEdit();
@@ -313,6 +335,8 @@ try {
     sceneControls.applySharedSnapshot(snapshot.entities);
     lightingControls.cancel();
     lightingSession.resume(snapshot.lighting);
+    particleControls.cancel();
+    particleSession.resume(snapshot.particles);
     for (const entity of snapshot.entities) updatePresence(entity.id);
     renderParticipants();
     void flushPendingOperations();
@@ -324,6 +348,7 @@ try {
       onStatus: setCollaborationStatus,
       onSnapshot: applyRoomSnapshot,
       onLighting: lightingSession.accept,
+      onParticles: particleSession.accept,
       onParticipantJoined: (participant) => {
         participants.set(participant.id, participant);
         renderParticipants();
@@ -447,6 +472,7 @@ try {
     connectionAttemptInProgress = false;
     collaborationDialog.close();
     lightingSession.leave();
+    particleSession.leave();
     setCollaborationStatus('disconnected', 'Colaboração desconectada · modo local');
     if (collaborationClient) {
       void collaborationClient.stop().catch((error) => {

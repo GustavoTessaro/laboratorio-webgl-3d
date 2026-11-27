@@ -4,6 +4,7 @@ import { bindTransformEditing, createSceneControls, synchronizeTransformTarget }
 import { createSceneLighting } from './graphics/scene-lighting.js';
 import { createViewCamera } from './graphics/view-camera.js';
 import { createCoordinateHelpers } from './graphics/coordinate-helpers.js';
+import { createParticleSystem } from './graphics/particle-system.js';
 import { SOLID_MATERIAL } from './graphics/object-materials.js';
 
 export { createEntityRegistry, bindTransformEditing, synchronizeTransformTarget };
@@ -371,6 +372,9 @@ export function createScene(container, {
   }
 
   const lighting = createSceneLighting(scene, renderer.capabilities?.maxTextureSize);
+  const context = renderer.getContext?.();
+  const pointSizeLimit = context?.getParameter?.(context.ALIASED_POINT_SIZE_RANGE)?.[1];
+  const particles = createParticleSystem(scene, pointSizeLimit, renderer.getPixelRatio?.());
 
   function toggleRotation() {
     const entity = entityRegistry.getSelectedEntityOrThrow();
@@ -426,6 +430,7 @@ export function createScene(container, {
   function render() {
     const delta = Math.min(clock.getDelta(), MAX_FRAME_DELTA);
     entityRegistry.updateAnimations(delta);
+    particles.update(delta);
     const selectedEntity = entityRegistry.getSelectedEntity();
     coordinates.update(selectedEntity?.mesh);
     if (selectedEntity) {
@@ -466,6 +471,7 @@ export function createScene(container, {
     selectionHelper.removeFromParent();
     selectionHelper.dispose();
     lighting.dispose();
+    particles.dispose();
     renderer.dispose();
     renderer.forceContextLoss();
     renderer.domElement.remove();
@@ -503,6 +509,7 @@ export function createScene(container, {
     resetAppearance,
     applyLighting: lighting.apply,
     setLightingHelper: lighting.setHelper,
+    particles,
     toggleRotation,
     setRotationSpeed,
     setRotationAxis,

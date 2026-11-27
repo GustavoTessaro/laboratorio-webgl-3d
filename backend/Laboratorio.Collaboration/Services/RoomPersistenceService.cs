@@ -203,6 +203,8 @@ public sealed class RoomPersistenceService(
 
         await hubContext.Clients.Group(CollaborationProtocol.RoomId)
             .SendAsync("RoomLightingChanged", store.GetLighting(), cancellationToken);
+        await hubContext.Clients.Group(CollaborationProtocol.RoomId)
+            .SendAsync("RoomParticlesChanged", store.GetParticles(), cancellationToken);
 
         foreach (var entityId in _pendingDeletes)
         {
@@ -306,12 +308,13 @@ public sealed class RoomPersistenceService(
                 .ToListAsync(cancellationToken)
             : [];
         return new PersistedRoomState(room is not null, records.Select(ToDto).ToArray(),
-            LightingSettings.FromStorage(room?.LightingJson));
+            LightingSettings.FromStorage(room?.LightingJson), ParticleSettings.FromStorage(room?.ParticlesJson));
     }
 
     private void ApplyPersistedState(PersistedRoomState persistedState)
     {
-        store.InitializeFromPersistence(persistedState.Entities, persistedState.RoomExists, persistedState.Lighting);
+        store.InitializeFromPersistence(
+            persistedState.Entities, persistedState.RoomExists, persistedState.Lighting, persistedState.Particles);
         ReplacePersistedEntities(persistedState.Entities);
     }
 
@@ -387,7 +390,8 @@ public sealed class RoomPersistenceService(
 
     }
 
-    private sealed record PersistedRoomState(bool RoomExists, EntityDto[] Entities, RoomLightingDto Lighting);
+    private sealed record PersistedRoomState(
+        bool RoomExists, EntityDto[] Entities, RoomLightingDto Lighting, RoomParticlesDto Particles);
 
     private static bool IsTransientDatabaseFailure(Exception exception)
     {
@@ -467,39 +471,78 @@ public sealed class RoomPersistenceService(
                 return (current, false);
 
             var next = new RoomLightingDto(checked(current.Revision + 1), settings);
-            try
-            {
-                await using var context = await contextFactory.CreateDbContextAsync();
-                var room = await context.Rooms.SingleAsync(item => item.RoomId == CollaborationProtocol.RoomId);
-                room.LightingJson = JsonSerializer.Serialize(next);
-                room.UpdatedAtUtc = DateTime.UtcNow;
-                await context.SaveChangesAsync();
-            }
-            catch (Exception writeException)
-            {
-                RoomLightingDto persisted;
-                try
+            await SaveRoomSettingsAsync(
+                room => room.LightingJson = JsonSerializer.Serialize(next),
+                room =>
                 {
-                    await using var context = await contextFactory.CreateDbContextAsync();
-                    var room = await context.Rooms.AsNoTracking()
-                        .SingleAsync(item => item.RoomId == CollaborationProtocol.RoomId);
-                    persisted = LightingSettings.FromStorage(room.LightingJson);
-                }
-                catch (Exception verificationException)
-                {
-                    MarkStateUncertain();
-                    throw CreatePersistenceException("Não foi possível confirmar a gravação da iluminação.",
-                        new AggregateException(writeException, verificationException), requiresReconciliation: true);
-                }
-                if (persisted.Revision != next.Revision || !JsonElement.DeepEquals(persisted.Settings, next.Settings))
-                    throw CreatePersistenceException("Não foi possível persistir a iluminação.", writeException);
-            }
+                    var persisted = LightingSettings.FromStorage(room.LightingJson);
+                    return persisted.Revision == next.Revision && JsonElement.DeepEquals(persisted.Settings, next.Settings);
+                });
             store.SetLighting(next);
             return (next, true);
         }
         finally
         {
             _writeLock.Release();
+        }
+    }
+
+    public async Task<(RoomParticlesDto State, bool Changed)> UpdateParticlesAsync(
+        string connectionId, ParticleCommandDto command)
+    {
+        await _writeLock.WaitAsync();
+        try
+        {
+            EnsureReady();
+            var current = store.GetParticles(connectionId);
+            var effects = ParticleSettings.Apply(current.Effects, command);
+            if (JsonElement.DeepEquals(current.Effects, effects)) return (current, false);
+
+            var next = new RoomParticlesDto(checked(current.Revision + 1), effects);
+            await SaveRoomSettingsAsync(
+                room => room.ParticlesJson = JsonSerializer.Serialize(next),
+                room =>
+                {
+                    var persisted = ParticleSettings.FromStorage(room.ParticlesJson);
+                    return persisted.Revision == next.Revision && JsonElement.DeepEquals(persisted.Effects, next.Effects);
+                });
+            store.SetParticles(next);
+            return (next, true);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    private async Task SaveRoomSettingsAsync(Action<RoomRecord> assign, Func<RoomRecord, bool> matches)
+    {
+        try
+        {
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var room = await context.Rooms.SingleAsync(item => item.RoomId == CollaborationProtocol.RoomId);
+            assign(room);
+            room.UpdatedAtUtc = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+        catch (Exception writeException)
+        {
+            bool persisted;
+            try
+            {
+                await using var context = await contextFactory.CreateDbContextAsync();
+                var room = await context.Rooms.AsNoTracking()
+                    .SingleAsync(item => item.RoomId == CollaborationProtocol.RoomId);
+                persisted = matches(room);
+            }
+            catch (Exception verificationException)
+            {
+                MarkStateUncertain();
+                throw CreatePersistenceException("Não foi possível confirmar a gravação das configurações da sala.",
+                    new AggregateException(writeException, verificationException), requiresReconciliation: true);
+            }
+            if (!persisted)
+                throw CreatePersistenceException("Não foi possível persistir as configurações da sala.", writeException);
         }
     }
 

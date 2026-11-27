@@ -1,0 +1,43 @@
+{
+  "maxEffects": 4,
+  "maxPerEffect": 5000,
+  "maxTotal": 12000,
+  "common": {
+    "enabled": true,
+    "count": [1000, 1, 5000, 1],
+    "color": "#74bdff",
+    "size": [4, 1, 14, 0.5],
+    "opacity": [0.8, 0.05, 1, 0.05],
+    "speed": [6, 0.1, 14, 0.1],
+    "x": [0, -10, 10, 0.1],
+    "y": [0.1, 0, 10, 0.1],
+    "z": [0, -10, 10, 0.1],
+    "seed": [42, 0, 2147483647, 1]
+  },
+  "effects": {
+    "fountain": {
+      "defaults": {},
+      "fields": {
+        "area": [0.6, 0, 4, 0.1],
+        "dispersion": [0.45, 0, 1, 0.01],
+        "gravity": [9.8, 0, 20, 0.1],
+        "life": [2.2, 0.25, 8, 0.05]
+      }
+    },
+    "rain": {
+      "defaults": { "color": "#9bd0ff", "y": 8, "speed": 8, "size": 3, "opacity": 0.7 },
+      "fields": { "area": [10, 0.5, 16, 0.1], "wind": [0.8, -6, 6, 0.1], "life": [2, 0.25, 8, 0.05] }
+    },
+    "snow": {
+      "defaults": { "color": "#eff8ff", "y": 7, "speed": 1.5, "size": 4, "opacity": 0.85 },
+      "fields": {
+        "area": [10, 0.5, 16, 0.1], "wind": [0.3, -6, 6, 0.1],
+        "dispersion": [0.7, 0, 1, 0.01], "life": [6, 0.25, 8, 0.05]
+      }
+    },
+    "galaxy": {
+      "defaults": { "color": "#c4a6ff", "y": 4, "speed": 1, "size": 3, "opacity": 0.65 },
+      "fields": { "radius": [5, 0.5, 8, 0.1], "arms": [4, 1, 8, 1], "dispersion": [0.3, 0, 1, 0.01] }
+    }
+  }
+}

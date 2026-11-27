@@ -32,7 +32,7 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
         await Groups.AddToGroupAsync(Context.ConnectionId, CollaborationProtocol.RoomId);
         await Clients.OthersInGroup(CollaborationProtocol.RoomId)
             .SendAsync("ParticipantJoined", snapshot.Participants.Single(p => p.Id == Context.ConnectionId));
-        return snapshot with { Lighting = store.GetLighting() };
+        return snapshot with { Lighting = store.GetLighting(), Particles = store.GetParticles() };
     }
 
     public async Task<RoomLightingDto> UpdateLighting(string? group, JsonElement? patch)
@@ -42,6 +42,21 @@ public sealed class LaboratoryHub(RoomStateStore store, RoomPersistenceService p
             var (state, changed) = await persistence.UpdateLightingAsync(Context.ConnectionId, group, patch);
             if (changed)
                 await Clients.Group(CollaborationProtocol.RoomId).SendAsync("RoomLightingChanged", state);
+            return state;
+        }
+        catch (Exception error) when (error is RoomPersistenceException or InvalidOperationException)
+        {
+            throw new HubException(error.Message);
+        }
+    }
+
+    public async Task<RoomParticlesDto> UpdateParticles(ParticleCommandDto command)
+    {
+        try
+        {
+            var (state, changed) = await persistence.UpdateParticlesAsync(Context.ConnectionId, command);
+            if (changed)
+                await Clients.Group(CollaborationProtocol.RoomId).SendAsync("RoomParticlesChanged", state);
             return state;
         }
         catch (Exception error) when (error is RoomPersistenceException or InvalidOperationException)

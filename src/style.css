@@ -693,6 +693,25 @@ h1 {
   display: none;
 }
 
+.particle-seed {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  color: #c7cedb;
+  font-size: 11px;
+}
+
+.particle-seed input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #191e28;
+  color: #e3e9ff;
+  color-scheme: dark;
+}
+
 .view-field {
   margin-top: 12px;
 }

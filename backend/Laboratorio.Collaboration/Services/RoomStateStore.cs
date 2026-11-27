@@ -19,6 +19,7 @@ public sealed class RoomStateStore
     private readonly TimeProvider _timeProvider;
     private bool _initialized;
     private RoomLightingDto _lighting = LightingSettings.Default;
+    private RoomParticlesDto _particles = ParticleSettings.Default;
 
     public RoomStateStore() : this(TimeProvider.System)
     {
@@ -41,7 +42,8 @@ public sealed class RoomStateStore
     }
 
     public void InitializeFromPersistence(
-        IEnumerable<EntityDto> entities, bool initialized, RoomLightingDto? lighting = null)
+        IEnumerable<EntityDto> entities, bool initialized, RoomLightingDto? lighting = null,
+        RoomParticlesDto? particles = null)
     {
         ArgumentNullException.ThrowIfNull(entities);
         lock (_sync)
@@ -62,6 +64,7 @@ public sealed class RoomStateStore
 
             _initialized = initialized;
             _lighting = lighting ?? LightingSettings.Default;
+            _particles = particles ?? ParticleSettings.Default;
         }
     }
 
@@ -77,6 +80,20 @@ public sealed class RoomStateStore
     internal void SetLighting(RoomLightingDto lighting)
     {
         lock (_sync) _lighting = lighting;
+    }
+
+    public RoomParticlesDto GetParticles(string? connectionId = null)
+    {
+        lock (_sync)
+        {
+            if (connectionId is not null) RequireParticipant(connectionId);
+            return _particles;
+        }
+    }
+
+    internal void SetParticles(RoomParticlesDto particles)
+    {
+        lock (_sync) _particles = particles;
     }
 
     public EntityDto? GetEntity(string entityId)
@@ -481,7 +498,7 @@ public sealed class RoomStateStore
                 entry.Key,
                 entry.Value.ParticipantId,
                 entry.Value.ParticipantName)).ToArray(),
-            _lighting);
+            _lighting, _particles);
     }
 
     private IReadOnlyList<EditLockDto> ExpireLocksUnsafe(Action<string>? discardPreview)

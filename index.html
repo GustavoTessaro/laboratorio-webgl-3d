@@ -295,8 +295,33 @@
           <details class="control-category lighting-controls">
             <summary id="lighting-title" class="control-section-title">Iluminação</summary>
             <div data-lighting-groups></div>
-            <button class="reset-appearance reset-lighting" type="button" data-reset-lighting>Restaurar toda a ilumina??o</button>
+            <button class="reset-appearance reset-lighting" type="button" data-reset-lighting>Restaurar toda a iluminação</button>
             <p class="object-action-message" data-lighting-message role="status" hidden></p>
+          </details>
+
+          <details class="control-category particle-controls">
+            <summary class="control-section-title">Partículas</summary>
+            <p class="geometry-description">Cada efeito anima pontos. A simulação roda neste navegador.</p>
+            <div class="add-object-options">
+              <select class="geometry-select" data-particle-add-type aria-label="Tipo de efeito para adicionar"></select>
+              <button class="add-object-option" type="button" data-particle-add>Adicionar efeito</button>
+            </div>
+            <p class="geometry-description"><output data-particle-count aria-live="polite"></output></p>
+            <p class="object-action-message" data-particle-message role="status" hidden></p>
+            <label class="geometry-field" for="particle-selection">Efeito selecionado</label>
+            <select id="particle-selection" class="geometry-select" data-particle-selection></select>
+            <div data-particle-editor hidden>
+              <label class="geometry-field view-field" for="particle-type">Tipo do efeito</label>
+              <select id="particle-type" class="geometry-select" data-particle-type></select>
+              <p class="geometry-description" data-particle-hint></p>
+              <div data-particle-fields></div>
+              <div class="object-management-actions view-framing">
+                <button type="button" class="object-action" data-particle-play>Pausar neste navegador</button>
+                <button type="button" class="object-action" data-particle-restart>Reiniciar simulação local</button>
+                <button type="button" class="object-action" data-particle-reset>Restaurar parâmetros</button>
+                <button type="button" class="object-action object-action--danger" data-particle-remove>Remover efeito</button>
+              </div>
+            </div>
           </details>
 
           <details class="control-category animation-controls">

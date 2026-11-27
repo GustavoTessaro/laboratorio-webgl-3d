@@ -64,6 +64,10 @@ public sealed record ParticipantDto(string Id, string Name);
 public sealed record EditLockDto(string EntityId, string ParticipantId, string ParticipantName);
 
 public sealed record RoomLightingDto(long Revision, JsonElement Settings);
+public sealed record RoomParticlesDto(long Revision, JsonElement Effects);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ParticleCommandDto(string Operation, string Id, JsonElement? Patch = null);
 
 public sealed record RoomSnapshotDto(
     int ProtocolVersion,
@@ -71,12 +75,13 @@ public sealed record RoomSnapshotDto(
     IReadOnlyCollection<EntityDto> Entities,
     IReadOnlyCollection<ParticipantDto> Participants,
     IReadOnlyCollection<EditLockDto> Locks,
-    RoomLightingDto Lighting);
+    RoomLightingDto Lighting,
+    RoomParticlesDto Particles);
 
 public sealed record LockResultDto(bool Granted, string? OwnerName = null, string? Reason = null);
 
 public static class CollaborationProtocol
 {
-    public const int Version = 4;
+    public const int Version = 5;
     public const string RoomId = "laboratorio-principal";
 }

@@ -42,8 +42,9 @@
 - [x] V2-05 implementada e validada com WebGL, SignalR local e recuperação após reinício com SQLite.
 - [x] V2-06 implementada e validada com WebGL, duas sessões SignalR e recuperação em SQLite.
 - [x] V2-07 implementada e validada com WebGL, duas sessões independentes e transformações compartilhadas.
+- [x] V2-08 implementada e validada com quatro efeitos, SignalR local e recuperação em SQLite.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
-- [ ] Pelo menos um recurso avançado demonstrável em V2-08 ou V2-10.
+- [x] A fonte de partículas da V2-08 é o recurso avançado demonstrável.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
 - [ ] V2-11 a V2-14 avaliadas individualmente conforme disponibilidade.
 - [ ] V2-15 com resultados dos testes, build, medições e recuperação da sala.
@@ -155,3 +156,26 @@ O gizmo usa os modos World e Local do Three.js. A escala usa sempre os eixos loc
 - [x] Build Vite concluído com os avisos de anotações do SignalR e tamanho do bundle. Build .NET concluído com zero avisos e 39 testes aprovados.
 - [x] Chrome headless com WebGL verificou as sete vistas, órbita e seleção por clique nas duas projeções, enquadramento de objetos com tamanhos distintos e o painel em viewport móvel. Dois clientes SignalR locais mantiveram câmeras e preferências independentes. Arrastes nativos do gizmo confirmaram uma translação global em perspectiva e uma local em ortográfica. As ações visuais não enviaram invocações SignalR no teste.
 - [ ] Validar navegação por toque e teclado em dispositivos reais e verificar a preservação do enquadramento em viewports extremamente estreitos. Permanecem as pendências de SQL Server e desempenho gráfico das etapas anteriores.
+
+## Registro da V2-08
+
+A fonte é o recurso avançado escolhido para a apresentação. Ela usa emissão ascendente, dispersão, uma equação balística com gravidade e reciclagem ao completar a vida útil ou voltar à altura do emissor. A chuva cai continuamente com vento no eixo X. A neve acrescenta oscilações laterais. A galáxia distribui os pontos em braços espirais e gira em torno do eixo Y. A mesma semente gera os mesmos parâmetros iniciais. A fase de reprodução é própria de cada navegador.
+
+O catálogo compartilhado limita a sala a quatro efeitos, 5.000 pontos por efeito e 12.000 pontos configurados no total, incluindo efeitos desativados. O emissor aceita X e Z de −10 a 10 e Y de 0 a 10. A área meteorológica é quadrada, centrada no emissor, e o vento faz os pontos retornarem pela borda do lado oposto. O raio da galáxia é limitado a 8. A região visual pode ultrapassar a grade. Os efeitos são independentes das malhas e dos limites usados pelo gizmo e pelo enquadramento.
+
+Cada efeito usa um `THREE.Points` com `BufferGeometry`, `BufferAttribute` dinâmico, `PointsMaterial` e buffers `Float32Array` reutilizados. A capacidade reservada é de 5.000 posições por emissor e até 20.000 posições em buffers, com draw range limitado ao total configurado. A reprodução atualiza apenas o trecho usado do atributo de posição; o delta é limitado a 50 ms. O tamanho em tela respeita o limite de pontos do WebGL e o pixel ratio. Os pontos usam recorte suave, depth test ativo, depth write desativado e blending aditivo na galáxia. A remoção e a desmontagem descartam buffers, materiais e textura compartilhada.
+
+### Colaboração e publicação
+
+A sala transmite comandos de criação, edição por campo, restauração e remoção. A ativação é compartilhada. Pausar, reproduzir ou reiniciar o relógio de um efeito é local. Prévia, posições e velocidades simuladas ficam no cliente. O servidor combina alterações em campos distintos e valida o orçamento antes da confirmação durável. No mesmo campo vale a última confirmação. Comandos sem mudança efetiva dispensam gravação. As revisões ignoram mensagens atrasadas e a fila de configurações é compartilhada como implementação entre iluminação e partículas, com estados independentes.
+
+O protocolo passa para **5**, de modo que participantes na mesma sala possam observar os efeitos compartilhados. A migração `20261127004156_AddRoomParticles` acrescenta a coluna anulável `Rooms.ParticlesJson`, como `TEXT` em SQLite e `nvarchar(2048)` em SQL Server. Uma sala legada começa sem efeitos e preserva iluminação e entidades. Para publicar, revisar o script idempotente de `AddRoomLighting` até `AddRoomParticles`, validar a leitura após backup e publicar backend e frontend em janela coordenada. O `Down` remove as configurações de partículas.
+
+### Resultados e pendências
+
+- [x] JavaScript com 40 testes. Inclui determinismo, delta, gravidade e vento, reciclagem, reprodução local, orçamento, descarte e uma única confirmação por gesto.
+- [x] Build Vite concluído com os avisos de anotações do SignalR e tamanho do bundle. Build .NET concluído com zero avisos e 41 testes aprovados.
+- [x] SQLite validou migração da sala legada, recuperação após reinício, mesclagem, resposta perdida recuperada e ausência de gravações redundantes. O EF gerou o script idempotente de SQL Server e conferiu o modelo.
+- [x] Chrome headless com WebGL verificou os quatro efeitos, prévia da fonte, pausa local, ativação e remoção compartilhadas, duas projeções, textura, sombra, recuperação após reinício e modo local. A amostra no orçamento de 12.000 pontos não gerou invocações SignalR.
+- [x] Uma amostra de 90 intervalos de quadro em Chrome headless com SwiftShader, canvas de 808 × 567, câmera ortográfica, 12.000 pontos, uma malha texturizada e sombra direcional registrou mediana de 33,4 ms e percentil 95 de 38,1 ms. São intervalos entre quadros do cenário completo em renderização por software.
+- [ ] Medir em GPU e dispositivos móveis reais. Verificar sobreposição transparente em cenas densas, controles por toque e publicação em SQL Server de teste.

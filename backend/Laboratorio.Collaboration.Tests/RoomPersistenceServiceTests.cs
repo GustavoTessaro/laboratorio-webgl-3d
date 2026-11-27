@@ -304,6 +304,104 @@ public sealed class RoomPersistenceServiceTests
     }
 
     [Fact]
+    public async Task ParticlesMigrationStartsEmptyAndRecoversMergedConfigurationWithNoRedundantWrites()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var factory = CreateFactory(connection, interceptor);
+        var legacy = CreateBox();
+        await SeedLegacyEntityAsync(factory, legacy, "20261127000611_AddRoomLighting");
+        const string lighting = """{"Revision":7,"Settings":{"directional":{"intensity":4}}}""";
+        await using (var database = await factory.CreateDbContextAsync())
+        {
+            await database.Database.ExecuteSqlInterpolatedAsync(
+                $"""UPDATE Rooms SET LightingJson = {lighting} WHERE RoomId = {CollaborationProtocol.RoomId}""");
+        }
+        var store = new RoomStateStore();
+        var service = CreateService(factory, store);
+        await StartAndWaitAsync(service);
+        var original = await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        await service.JoinAsync("bia", "Bia", CollaborationProtocol.Version, []);
+        Assert.Equal(legacy, Assert.Single(original.Entities));
+        Assert.Equal(7, original.Lighting.Revision);
+        Assert.Empty(original.Particles.Effects.EnumerateObject());
+        var writes = interceptor.CommitCount;
+        var id = Guid.NewGuid().ToString();
+        var add = new ParticleCommandDto("add", id, JsonSerializer.SerializeToElement(new { type = "fountain", count = 5000 }));
+        var created = await service.UpdateParticlesAsync("ana", add);
+        Assert.True(created.Changed);
+        Assert.Equal(5000, created.State.Effects.GetProperty(id).GetProperty("count").GetInt32());
+        Assert.False((await service.UpdateParticlesAsync("ana", add)).Changed);
+
+        var results = await Task.WhenAll(
+            service.UpdateParticlesAsync("ana", new("patch", id, JsonSerializer.SerializeToElement(new { gravity = 12.5 }))),
+            service.UpdateParticlesAsync("bia", new("patch", id, JsonSerializer.SerializeToElement(new { color = "#AABBCC" }))));
+        Assert.All(results, result => Assert.True(result.Changed));
+        Assert.Equal(writes + 3, interceptor.CommitCount);
+        var current = store.GetParticles();
+        var effect = current.Effects.GetProperty(id);
+        Assert.Equal(12.5, effect.GetProperty("gravity").GetDouble());
+        Assert.Equal("#aabbcc", effect.GetProperty("color").GetString());
+        Assert.False((await service.UpdateParticlesAsync("ana", new("patch", id,
+            JsonSerializer.SerializeToElement(new { gravity = 12.5 })))).Changed);
+        Assert.Equal(writes + 3, interceptor.CommitCount);
+        interceptor.ThrowAfterNextCommit();
+        var pausedEffect = await service.UpdateParticlesAsync("ana", new("patch", id,
+            JsonSerializer.SerializeToElement(new { enabled = false })));
+        Assert.Equal(4, pausedEffect.State.Revision);
+
+        var restarted = CreateService(factory, new RoomStateStore());
+        await StartAndWaitAsync(restarted);
+        var reopened = await restarted.JoinAsync("caio", "Caio", CollaborationProtocol.Version, []);
+        Assert.Equal(7, reopened.Lighting.Revision);
+        Assert.Equal(legacy, Assert.Single(reopened.Entities));
+        Assert.Equal(pausedEffect.State.Revision, reopened.Particles.Revision);
+        Assert.True(JsonElement.DeepEquals(pausedEffect.State.Effects, reopened.Particles.Effects));
+        Assert.True((await restarted.UpdateParticlesAsync("caio", new("remove", id))).Changed);
+        Assert.False((await restarted.UpdateParticlesAsync("caio", new("remove", id))).Changed);
+        Assert.Equal(writes + 5, interceptor.CommitCount);
+    }
+
+    [Fact]
+    public async Task ParticlesRejectsInvalidCommandsAndEnforcesRoomBudgetEvenWhenDisabled()
+    {
+        await using var connection = await OpenDatabaseAsync();
+        var interceptor = new ThrowAfterCommitInterceptor();
+        var store = new RoomStateStore();
+        var service = CreateService(CreateFactory(connection, interceptor), store);
+        await StartAndWaitAsync(service);
+        await service.JoinAsync("ana", "Ana", CollaborationProtocol.Version, []);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.UpdateParticlesAsync("guest", new("remove", Guid.NewGuid().ToString())));
+        var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid().ToString()).ToArray();
+        var types = new[] { "fountain", "rain", "snow", "galaxy" };
+        var amounts = new[] { 5000, 5000, 1999, 1 };
+        for (var index = 0; index < types.Length; index++)
+        {
+            await service.UpdateParticlesAsync("ana", new("add", ids[index], JsonSerializer.SerializeToElement(
+                new { type = types[index], count = amounts[index], enabled = index != 1 })));
+        }
+        var writes = interceptor.CommitCount;
+        foreach (var invalid in new[]
+        {
+            """{"count":5001}""", """{"count":1.5}""", """{"wind":3}""", """{"y":-1}""", """{"seed":-1}""",
+            """{"type":"unknown"}""", """{"color":"red"}""", """{"opacity":1.5}""",
+            """{"count":1,"count":2}"""
+        })
+        {
+            using var json = JsonDocument.Parse(invalid);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.UpdateParticlesAsync("ana", new("patch", ids[0], json.RootElement)));
+        }
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateParticlesAsync(
+            "ana", new("add", ids[4], JsonSerializer.SerializeToElement(new { type = "snow", count = 1 }))));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateParticlesAsync(
+            "ana", new("patch", ids[3], JsonSerializer.SerializeToElement(new { count = 2 }))));
+        Assert.Equal(writes, interceptor.CommitCount);
+        Assert.Equal(4, store.GetParticles().Revision);
+    }
+
+    [Fact]
     public async Task FailedFinalWriteRollsBackMemoryAndReportsFailure()
     {
         await using var connection = await OpenDatabaseAsync();
