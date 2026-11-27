@@ -149,6 +149,66 @@
             >
               Redimensionar objeto
             </button>
+            <label class="geometry-field view-field" for="transform-space">Coordenadas do gizmo</label>
+            <select id="transform-space" class="geometry-select" aria-describedby="transform-space-status">
+              <option value="world">Globais (World)</option>
+              <option value="local">Locais (Local)</option>
+            </select>
+            <p id="transform-space-status" class="geometry-description" aria-live="polite">Em uso: globais.</p>
+          </details>
+
+          <details class="control-category camera-controls">
+            <summary class="control-section-title">Câmera e visualização</summary>
+            <label class="geometry-field" for="camera-projection">Projeção</label>
+            <select id="camera-projection" class="geometry-select" aria-describedby="camera-projection-hint">
+              <option value="perspective">Perspectiva</option>
+              <option value="orthographic">Ortográfica</option>
+            </select>
+            <p id="camera-projection-hint" class="geometry-description"></p>
+            <label class="range-control" data-camera-fov>
+              <span class="range-label"><span>Campo de visão vertical</span><output for="camera-fov">50°</output></span>
+              <input id="camera-fov" type="range" min="25" max="85" step="1" value="50" />
+            </label>
+            <label class="range-control" data-camera-zoom hidden>
+              <span class="range-label"><span>Zoom ortográfico</span><output for="camera-zoom">1×</output></span>
+              <input id="camera-zoom" type="range" min="0.25" max="4" step="any" value="1" />
+            </label>
+
+            <fieldset class="appearance-group view-group">
+              <legend>Vistas e enquadramento</legend>
+              <div class="view-actions">
+                <button type="button" class="object-action" data-camera-view="front">Frontal</button>
+                <button type="button" class="object-action" data-camera-view="back">Traseira</button>
+                <button type="button" class="object-action" data-camera-view="top">Superior</button>
+                <button type="button" class="object-action" data-camera-view="bottom">Inferior</button>
+                <button type="button" class="object-action" data-camera-view="left">Esquerda</button>
+                <button type="button" class="object-action" data-camera-view="right">Direita</button>
+                <button type="button" class="object-action" data-camera-view="isometric">Isométrica</button>
+              </div>
+              <div class="view-actions view-framing">
+                <button type="button" class="object-action" data-frame-selected disabled>Enquadrar seleção</button>
+                <button type="button" class="object-action" data-frame-all>Enquadrar cena</button>
+              </div>
+            </fieldset>
+
+            <fieldset class="appearance-group view-group">
+              <legend>Posição e alvo</legend>
+              <p class="geometry-description">Posição da câmera <output id="camera-position"></output></p>
+              <div class="view-target" role="group" aria-label="Coordenadas do alvo">
+                <label for="camera-target-x">Alvo X<input id="camera-target-x" data-camera-target="x" type="number" min="-10" max="10" step="any" inputmode="decimal" /></label>
+                <label for="camera-target-y">Alvo Y<input id="camera-target-y" data-camera-target="y" type="number" min="0" max="10" step="any" inputmode="decimal" /></label>
+                <label for="camera-target-z">Alvo Z<input id="camera-target-z" data-camera-target="z" type="number" min="-10" max="10" step="any" inputmode="decimal" /></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="appearance-group view-group">
+              <legend>Eixos</legend>
+              <p class="axis-legend"><span>X vermelho</span><span>Y verde</span><span>Z azul</span></p>
+              <label class="custom-color-control"><span>Mostrar eixos globais</span><input type="checkbox" data-camera-axis="world" /></label>
+              <label class="custom-color-control"><span>Mostrar eixos da seleção</span><input type="checkbox" data-camera-axis="local" /></label>
+            </fieldset>
+            <button type="button" class="reset-appearance" data-reset-camera>Restaurar câmera padrão</button>
+            <p class="object-action-message" data-camera-message role="status" hidden></p>
           </details>
 
           <details class="control-category object-controls" data-geometry-panel>

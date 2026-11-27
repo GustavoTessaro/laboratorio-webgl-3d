@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createEntityRegistry } from './graphics/entity-registry.js';
 import { bindTransformEditing, createSceneControls, synchronizeTransformTarget } from './graphics/scene-controls.js';
 import { createSceneLighting } from './graphics/scene-lighting.js';
+import { createViewCamera } from './graphics/view-camera.js';
+import { createCoordinateHelpers } from './graphics/coordinate-helpers.js';
 import { SOLID_MATERIAL } from './graphics/object-materials.js';
 
 export { createEntityRegistry, bindTransformEditing, synchronizeTransformTarget };
@@ -23,8 +25,7 @@ export function createScene(container, {
   const presenceBounds = new THREE.Box3();
   const presenceCenter = new THREE.Vector3();
 
-  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-  camera.position.set(4, 3, 5);
+  const cameraView = createViewCamera();
 
   renderer.setPixelRatio(Math.min(view.devicePixelRatio || 1, MAX_PIXEL_RATIO));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -32,7 +33,9 @@ export function createScene(container, {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.prepend(renderer.domElement);
 
-  const { controls, transformControls, transformHelper } = createSceneControls(scene, camera, renderer.domElement);
+  const { controls, transformControls, transformHelper } = createSceneControls(scene, cameraView.camera, renderer.domElement);
+  cameraView.connect(controls, transformControls);
+  const coordinates = createCoordinateHelpers(scene);
 
   const entityRegistry = createEntityRegistry(scene);
   entityRegistry.createEntity('box', {
@@ -53,6 +56,7 @@ export function createScene(container, {
   selectionHelper.frustumCulled = false;
   scene.add(selectionHelper);
   let activeTransformMode = null;
+  let transformSpace = 'world';
   let selectedEntityEditable = true;
   let orbitWasEnabled = controls.enabled;
   let gizmoPointerActive = false;
@@ -129,6 +133,7 @@ export function createScene(container, {
       transformControls,
       selectedEntityEditable ? entity : null,
       activeTransformMode,
+      transformSpace,
     );
     if (!entity) {
       selectionHelper.visible = false;
@@ -238,6 +243,8 @@ export function createScene(container, {
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
+    const camera = cameraView.camera;
+    camera.updateMatrixWorld();
     raycaster.setFromCamera(normalizedPointer, camera);
     const meshes = entityRegistry.getEntities().map((entity) => entity.mesh);
     const [intersection] = raycaster.intersectObjects(meshes, false);
@@ -273,6 +280,28 @@ export function createScene(container, {
   function setSelectedEntityEditable(editable) {
     selectedEntityEditable = Boolean(editable);
     synchronizeSelectedEntity();
+  }
+
+  function setTransformSpace(space) {
+    if (transformEdit.entityId || !['world', 'local'].includes(space)) return false;
+    transformSpace = space;
+    synchronizeSelectedEntity();
+    return true;
+  }
+
+  function getTransformSpace() {
+    return { preferred: transformSpace, effective: activeTransformMode === 'scale' ? 'local' : transformSpace,
+      scaling: activeTransformMode === 'scale' };
+  }
+
+  function changeCamera(action, ...args) {
+    if (transformEdit.entityId) return false;
+    return action(...args);
+  }
+
+  function frameSelected() {
+    const entity = entityRegistry.getSelectedEntity();
+    return entity ? changeCamera(cameraView.frame, [entity.mesh]) : false;
   }
 
   function removeEntity(id) {
@@ -376,8 +405,7 @@ export function createScene(container, {
     const { width, height } = container.getBoundingClientRect();
     if (width === 0 || height === 0) return;
 
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    cameraView.resize(width, height);
     renderer.setSize(width, height, false);
   }
 
@@ -399,6 +427,7 @@ export function createScene(container, {
     const delta = Math.min(clock.getDelta(), MAX_FRAME_DELTA);
     entityRegistry.updateAnimations(delta);
     const selectedEntity = entityRegistry.getSelectedEntity();
+    coordinates.update(selectedEntity?.mesh);
     if (selectedEntity) {
       selectionHelper.setFromObject(selectedEntity.mesh);
       transformHelper.updateMatrixWorld(true);
@@ -411,7 +440,7 @@ export function createScene(container, {
       sprite.position.set(presenceCenter.x, presenceBounds.max.y + 0.3, presenceCenter.z);
     }
     controls.update();
-    renderer.render(scene, camera);
+    renderer.render(scene, cameraView.camera);
   }
 
   renderer.setAnimationLoop(render);
@@ -430,6 +459,8 @@ export function createScene(container, {
     transformControls.dispose();
     transformHelper.removeFromParent();
     controls.dispose();
+    cameraView.dispose();
+    coordinates.dispose();
     for (const id of presenceLabels.keys()) removePresenceLabel(id);
     entityRegistry.dispose();
     selectionHelper.removeFromParent();
@@ -451,6 +482,19 @@ export function createScene(container, {
     setEntityPresence: updateEntityPresence,
     removeEntity,
     setTransformMode,
+    setTransformSpace,
+    getTransformSpace,
+    getCameraState: cameraView.state,
+    setCameraChangeHandler: cameraView.setChangeHandler,
+    setCameraProjection: (projection) => changeCamera(cameraView.setProjection, projection),
+    setCameraFov: (value) => changeCamera(cameraView.setFov, value),
+    setCameraZoom: (value) => changeCamera(cameraView.setZoom, value),
+    setCameraTarget: (axis, value) => changeCamera(cameraView.setTarget, axis, value),
+    setCameraPreset: (name) => changeCamera(cameraView.preset, name),
+    frameSelected,
+    frameAll: () => changeCamera(cameraView.frame, entityRegistry.getEntities().map(({ mesh }) => mesh)),
+    resetCamera: () => changeCamera(cameraView.reset),
+    setCoordinateHelper: coordinates.setVisible,
     cancelTransformEdit: transformEdit.cancel,
     setSelectedEntityEditable,
     selectObject,

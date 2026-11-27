@@ -44,7 +44,25 @@ test('disposing the scene stops rendering and releases its owned resources silen
   }, { renderer });
   const entity = controls.getSelectedEntity();
   const mutations = [];
-  controls.setCollaborationHandlers({ onEntityDeleted: (id) => mutations.push(id) });
+  controls.setCollaborationHandlers({
+    onEntityDeleted: (id) => mutations.push(id),
+    onEntityChanged: (snapshot) => mutations.push(snapshot),
+    onEditStateChange: (id) => mutations.push(id),
+  });
+  const before = controls.getSharedEntities();
+  controls.setCameraProjection('orthographic');
+  controls.setCameraPreset('top');
+  controls.setCameraZoom(2);
+  controls.frameSelected();
+  controls.frameAll();
+  controls.setCameraTarget('x', 2);
+  controls.resetCamera();
+  controls.setCameraFov(75);
+  controls.setTransformSpace('local');
+  controls.setTransformMode('scale');
+  controls.setCoordinateHelper('world', true);
+  controls.setCoordinateHelper('local', true);
+  assert.deepEqual(controls.getSharedEntities(), before);
   controls.setEntityPresence(entity.id, 'Ana');
   loop();
   const sprite = scene.children.find((object) => object.isSprite);

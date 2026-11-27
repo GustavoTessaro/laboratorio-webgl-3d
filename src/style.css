@@ -689,6 +689,61 @@ h1 {
   line-height: 1.5;
 }
 
+.camera-controls [hidden] {
+  display: none;
+}
+
+.view-field {
+  margin-top: 12px;
+}
+
+.view-actions,
+.view-target {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.view-actions button {
+  min-height: 36px;
+  overflow-wrap: anywhere;
+}
+
+.view-framing {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.view-target label {
+  min-width: 0;
+  color: #c7cedb;
+  font-size: 11px;
+}
+
+.view-target input {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #191e28;
+  color: #e3e9ff;
+  color-scheme: dark;
+}
+
+.axis-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 6px 0;
+  font-size: 10px;
+}
+
+.axis-legend span:nth-child(1) { color: #ff797d; }
+.axis-legend span:nth-child(2) { color: #72df90; }
+.axis-legend span:nth-child(3) { color: #8eafff; }
+
 .geometry-field {
   display: block;
   margin-bottom: 5px;

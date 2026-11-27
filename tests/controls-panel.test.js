@@ -38,6 +38,8 @@ test('the panel cancels a local color preview on a foreign lock and removes list
   }, {
     getSelectedEntity: () => entity,
     setSelectedEntityEditable(value) { editable = value; },
+    setCameraChangeHandler() {},
+    getTransformSpace: () => ({ preferred: 'world', effective: 'world', scaling: false }),
     hasCopiedProperties: () => false,
     setColor(value) { committed.push(value); },
   }, {

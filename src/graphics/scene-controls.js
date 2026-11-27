@@ -7,10 +7,6 @@ export function createSceneControls(scene, camera, canvas) {
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
-  controls.minDistance = 1.8;
-  controls.maxDistance = 30;
-  controls.target.set(0, 0.5, 0);
-  controls.cursor.set(0, 0.5, 0);
   controls.maxTargetRadius = Math.hypot(12, 11.5, 12);
 
   const transformControls = new TransformControls(camera, canvas);
@@ -22,7 +18,8 @@ export function createSceneControls(scene, camera, canvas) {
   return { controls, transformControls, transformHelper };
 }
 
-export function synchronizeTransformTarget(transformControls, entity, mode) {
+export function synchronizeTransformTarget(transformControls, entity, mode, space = 'world') {
+  transformControls.setSpace(mode === 'scale' ? 'local' : space);
   if (!entity) {
     transformControls.detach();
     transformControls.enabled = false;
@@ -48,7 +45,7 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
     mesh.scale.set(pose.scale.x, pose.scale.y, pose.scale.z);
   }
 
-  function getEditedSnapshot({ entity, initialPose, mode }, final) {
+  function getEditedSnapshot({ entity, initialPose, mode, space, axis }, final) {
     const { mesh } = entity;
     const pose = registry.serializeEntity(entity.id, mesh);
     const base = registry.serializeEntity(entity.id);
@@ -59,15 +56,27 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
 
     registry.restoreBase(entity);
     if (mode === 'translate') {
-      mesh.position.x += pose.position.x - initialPose.position.x;
-      mesh.position.y += pose.position.y - initialPose.position.y;
-      mesh.position.z += pose.position.z - initialPose.position.z;
+      const offset = new THREE.Vector3(
+        pose.position.x - initialPose.position.x,
+        pose.position.y - initialPose.position.y,
+        pose.position.z - initialPose.position.z,
+      );
+      if (space === 'local' && axis !== 'XYZ') {
+        const { x, y, z } = initialPose.rotation;
+        const visualInverse = new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z)).invert();
+        offset.applyQuaternion(visualInverse).applyQuaternion(mesh.quaternion);
+      }
+      mesh.position.add(offset);
     } else if (mode === 'rotate') {
       const before = new THREE.Euler(initialPose.rotation.x, initialPose.rotation.y, initialPose.rotation.z);
       const after = new THREE.Euler(pose.rotation.x, pose.rotation.y, pose.rotation.z);
-      const delta = new THREE.Quaternion().setFromEuler(after)
-        .multiply(new THREE.Quaternion().setFromEuler(before).invert());
-      mesh.quaternion.premultiply(delta);
+      const beforeInverse = new THREE.Quaternion().setFromEuler(before).invert();
+      const afterRotation = new THREE.Quaternion().setFromEuler(after);
+      if (space === 'local' && !['E', 'XYZE'].includes(axis)) {
+        mesh.quaternion.multiply(beforeInverse.multiply(afterRotation));
+      } else {
+        mesh.quaternion.premultiply(afterRotation.multiply(beforeInverse));
+      }
     } else {
       mesh.scale.set(pose.scale.x, pose.scale.y, pose.scale.z);
     }
@@ -106,7 +115,10 @@ export function bindTransformEditing(controls, registry, { onStart, onPreview, o
       controls.pointerUp(null);
       return;
     }
-    edit = { entity, mode: controls.mode, initialPose: registry.serializeEntity(entity.id, entity.mesh) };
+    edit = {
+      entity, mode: controls.mode, space: controls.space, axis: controls.axis,
+      initialPose: registry.serializeEntity(entity.id, entity.mesh),
+    };
     entity.editingTransform = true;
     onStart?.(entity.id);
   }

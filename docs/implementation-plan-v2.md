@@ -41,6 +41,7 @@
 - [x] V2-04 implementada e validada com WebGL, SignalR local e migração SQLite.
 - [x] V2-05 implementada e validada com WebGL, SignalR local e recuperação após reinício com SQLite.
 - [x] V2-06 implementada e validada com WebGL, duas sessões SignalR e recuperação em SQLite.
+- [x] V2-07 implementada e validada com WebGL, duas sessões independentes e transformações compartilhadas.
 - [ ] V2-03 a V2-07 entregues no recorte P0, com os critérios visuais e colaborativos registrados.
 - [ ] Pelo menos um recurso avançado demonstrável em V2-08 ou V2-10.
 - [ ] V2-08 a V2-10 acompanhadas por incremento, com itens P1 adiados identificados.
@@ -139,3 +140,18 @@ O protocolo passa para **4** para que clientes na mesma sala observem também as
 - [x] O EF gerou o script idempotente para SQL Server e confirmou o modelo. A aplicação em SQL Server de teste permanece pendente.
 - [x] Chrome headless com WebGL verificou cinco fontes simultâneas, sombras na direção, no foco e na pontual, diferenças de pixels no piso ao alternar a sombra, Basic sem resposta à direcional e resposta de Phong e Standard. Dois clientes verificaram prévia local, atualizações concorrentes, auxiliares individuais e recuperação depois de reiniciar o backend.
 - [ ] Medir o custo das sombras simultâneas em hardware real, especialmente as seis direções da pontual. Conferir artefatos de sombra, controles em dispositivos de toque e publicação coordenada em SQL Server de teste.
+
+## Registro da V2-07
+
+A câmera em perspectiva continua sendo o padrão, com FOV de 50°, posição (4, 3, 5) e alvo (0, 0,5, 0). Renderização, resize, raycasting, OrbitControls e TransformControls usam a câmera ativa. A troca conserva direção, alvo e escala aparente no plano do alvo dentro dos limites de navegação. O FOV pode variar de 25° a 85° e o zoom ortográfico de 0,25× a 4×. O zoom ortográfico volta a 1× quando a projeção é recalibrada pela troca ou por um enquadramento. Editar o alvo desloca câmera e alvo juntos sem alterar a orientação.
+
+A convenção é X vermelho, Y verde para cima e Z azul. As vistas indicam de onde a câmera observa o alvo. Frontal vem de +Z, traseira de −Z, superior de +Y, inferior de −Y, esquerda de −X e direita de +X. Superior e inferior usam um pequeno desvio em +Z para manter a orientação estável no OrbitControls. A vista isométrica usa a diagonal (+X, +Y, +Z). Com a projeção ortográfica, essa vista mantém as proporções sem convergência. O enquadramento usa a caixa calculada a partir dos vértices da malha em coordenadas de mundo, incluindo dimensões parametrizadas, rotação e escala. Uma cena vazia mantém a câmera atual.
+
+O gizmo usa os modos World e Local do Three.js. A escala usa sempre os eixos locais e conserva a preferência para translação e rotação. Durante um gesto, o deslocamento de eixo e a rotação local são reaplicados na base do objeto mesmo quando o gizmo partiu de uma pose animada. Os movimentos livres seguem as convenções do Three.js. A troca de câmera e de coordenadas espera o fim de um arraste em andamento. Os eixos opcionais são auxiliares independentes das malhas e acompanham a pose visual da seleção. Essas preferências ficam na sessão do navegador. O contrato, protocolo e schema da sala permanecem iguais.
+
+### Resultados e pendências
+
+- [x] JavaScript com 34 testes. Inclui projeções, enquadramento e alvo, sete vistas, raycast, resize, limites, cena vazia, operações locais e globais em objetos animados, descarte e ausência de publicação em mudanças visuais.
+- [x] Build Vite concluído com os avisos de anotações do SignalR e tamanho do bundle. Build .NET concluído com zero avisos e 39 testes aprovados.
+- [x] Chrome headless com WebGL verificou as sete vistas, órbita e seleção por clique nas duas projeções, enquadramento de objetos com tamanhos distintos e o painel em viewport móvel. Dois clientes SignalR locais mantiveram câmeras e preferências independentes. Arrastes nativos do gizmo confirmaram uma translação global em perspectiva e uma local em ortográfica. As ações visuais não enviaram invocações SignalR no teste.
+- [ ] Validar navegação por toque e teclado em dispositivos reais e verificar a preservação do enquadramento em viewports extremamente estreitos. Permanecem as pendências de SQL Server e desempenho gráfico das etapas anteriores.

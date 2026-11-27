@@ -1,12 +1,14 @@
 import { bindLocalInput } from './edit-gestures.js';
 import { bindGeometryControls } from './geometry-controls.js';
 import { bindMaterialControls } from './material-controls.js';
+import { bindCameraControls } from './camera-controls.js';
 
 export function createControlsPanel(root, sceneControls, { getLock, isLocked, onDelete }) {
   const lifetime = new AbortController();
   const { signal } = lifetime;
   const geometryControls = bindGeometryControls(root, sceneControls, signal);
   const materialControls = bindMaterialControls(root, sceneControls, signal, syncSelectedEntity);
+  const cameraControls = bindCameraControls(root, sceneControls, signal);
   const sceneObjectList = root.querySelector('#scene-object-list');
   const duplicateObjectButton = root.querySelector('[data-duplicate-object]');
   const deleteObjectButton = root.querySelector('[data-delete-object]');
@@ -46,6 +48,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
   function syncSelectedEntity() {
     const entity = sceneControls.getSelectedEntity();
     const hasSelection = Boolean(entity);
+    cameraControls.syncSelection(hasSelection);
     const lockedByAnotherParticipant = Boolean(entity && isLocked(entity.id));
     for (const input of localInputs) {
       if (input.entity && (input.entity !== entity || lockedByAnotherParticipant)) input.cancel();
@@ -151,6 +154,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
         ? null
         : button.dataset.transformMode;
       sceneControls.setTransformMode(mode);
+      cameraControls.syncSpace();
       transformModeButtons.forEach((option) => {
         option.setAttribute('aria-pressed', String(option === button && mode !== null));
       });
@@ -279,6 +283,7 @@ export function createControlsPanel(root, sceneControls, { getLock, isLocked, on
     dispose() {
       lifetime.abort();
       geometryControls.dispose();
+      cameraControls.dispose();
       cancelLocalInputs();
     },
   };
